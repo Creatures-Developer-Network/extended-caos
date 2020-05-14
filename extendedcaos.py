@@ -1,4 +1,3 @@
-import collections
 import itertools
 import json
 import re
@@ -26,21 +25,21 @@ class ParserState:
             raise Exception("Expected %r, got %s\n" % (toktypes, self.tokens[newp][0]))
 
 def caosliteral(value, token):
-    return collections.OrderedDict([("type", "Literal"), ("value", value), ("token", token)])
+    return {"type": "Literal", "value": value, "token": token }
 
 def caosvariable(value, token):
-    return collections.OrderedDict([("type", "Variable"), ("value", value), ("token", token)])
+    return {"type": "Variable", "value": value, "token": token }
 
 def caoscondition(children, start_token):
     end_token = children[-1].get("end_token") or children[-1].get("token")
-    return collections.OrderedDict([("type", "Condition"), ("children", children), ("start_token", start_token), ("end_token", end_token)])
+    return {"type": "Condition", "children": children, "start_token": start_token, "end_token": end_token }
 
 def caosconditionkeyword(value):
-    return collections.OrderedDict([("type", "ConditionKeyword"), ("value", value)])
+    return {"type": "ConditionKeyword", "value": value }
 
 def maybe_eat_whitespace(state):
     ate_whitespace = False
-    while state.tokens[state.p][0] in (TOK_COMMENT, TOK_WHITESPACE):
+    while state.tokens[state.p][0] in (TOK_COMMENT, TOK_WHITESPACE, TOK_NEWLINE):
         ate_whitespace = True
         state.p += 1
     return ate_whitespace
@@ -125,7 +124,7 @@ def parse_command(state, is_toplevel):
         if state.tokens[state.p + 1][0] != TOK_DOT:
             value = state.tokens[state.p][1]
             state.p += 1
-            state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI))
+            state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
             return caosvariable(value, startp)
         dotcommand = True
         namespace = ""
@@ -154,14 +153,17 @@ def parse_command(state, is_toplevel):
         raise Exception("Unknown command '%s'" % ((namespace + " " if namespace else "") + command))
     assert len(commandinfos) == 1
     state.p += 1
-
-    if commandinfos[0]["arguments"]:
-        eat_whitespace(state)
     
     args = []
     for _ in commandinfos[0]["arguments"]:
+        eat_whitespace(state)
         if _["type"] == "condition":
             args.append(parse_condition(state))
+        elif _["type"] == "label":
+            if state.tokens[state.p][0] != TOK_WORD:
+                raise Exception("Expected label, got %s '%s'\n" % (t[0], t[1]))
+            args.append({"type": "Label", "value": state.tokens[state.p][1], "token": state.p })
+            state.p += 1
         else:
             args.append(parse_value(state))
     
@@ -171,25 +173,25 @@ def parse_command(state, is_toplevel):
         end_token = startp
     
     if dotcommand:
-        return collections.OrderedDict([
-            ("type", "DotCommand"),
-            ("targ", targ),
-            ("command", command),
-            ("commandtype", ("statement" if is_toplevel else "expression")),
-            ("commandret", commandinfos[0]["type"]),
-            ("args", args),
-            ("start_token", startp),
-            ("end_token", end_token)
-        ])
+        return {
+            "type": "DotCommand",
+            "targ": targ,
+            "command": command,
+            "commandtype": ("statement" if is_toplevel else "expression"),
+            "commandret": commandinfos[0]["type"],
+            "args": args,
+            "start_token": startp,
+            "end_token": end_token,
+        }
     else:
-        return collections.OrderedDict([
-            ("type", "Command"),
-            ("name", (namespace + " " if namespace else "") + command),
-            ("commandtype", ("statement" if is_toplevel else "expression")),
-            ("args", args),
-            ("start_token", startp),
-            ("end_token", end_token)
-        ])
+        return {
+            "type": "Command",
+            "name": (namespace + " " if namespace else "") + command,
+            "commandtype": ("statement" if is_toplevel else "expression"),
+            "args": args,
+            "start_token": startp,
+            "end_token": end_token,
+        }
 
 def parse_toplevel(state):
     maybe_eat_whitespace(state)
@@ -205,12 +207,12 @@ def parse_value(state):
     elif state.tokens[state.p][0] == TOK_INTEGER:
         value = state.tokens[state.p][1]
         state.p += 1
-        state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI))
+        state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
         return caosliteral(value, startp)
     elif state.tokens[state.p][0] == TOK_STRING:
         value = state.tokens[state.p][1]
         state.p += 1
-        state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI))
+        state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
         return caosliteral(value, startp)
     else:
         raise Exception("Unimplemented token type %s" % state.tokens[state.p][0])
@@ -424,7 +426,10 @@ def namedvariables_to_vaxx(tokens):
     for s in scripts:
         var_mapping = {}
         for d in s.dollar_vars:
-            possibles = ["va{:02}".format(i) for i in range(100) if "va{:02}".format(i) not in itertools.chain(s.vaxx_vars, var_mapping.values())]
+            possibles = [
+                "va{:02}".format(i) for i in range(100)
+                if "va{:02}".format(i) not in itertools.chain(s.vaxx_vars, var_mapping.values())
+            ]
             if not possibles:
                 raise Exception("Couldn't allocate variable for '%s'" % d)
             var_mapping[d] = possibles[0]
@@ -434,12 +439,65 @@ def namedvariables_to_vaxx(tokens):
     
     return tokens
 
+def get_indentation_at(tokens, i):
+    assert tokens[i][0] != TOK_NEWLINE
+    assert tokens[i][0] != TOK_WHITESPACE
+    
+    while i >= 0:
+        if tokens[i][0] == TOK_NEWLINE:
+            break
+        i -= 1
+    
+    if tokens[i+1][0] == TOK_WHITESPACE:
+        return tokens[i+1][1]
+    else:
+        return ''
+
 def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))    
     tokens = move_comments_to_own_line(tokens)
-    tokens = namedvariables_to_vaxx(tokens)
     
-    # parse(tokens)
+    parsetree = parse(tokens)
+    print(parsetree)
+    print(json.dumps(parsetree, indent=2))
+    
+    insertions = []
+    
+    for toplevel in parsetree:
+        if toplevel.get('type', '') != "DotCommand":
+            continue
+        
+        indent = get_indentation_at(tokens, toplevel["start_token"])
+        insertion_point = toplevel["start_token"]
+        insertions.append((insertion_point, [
+            (TOK_WORD, "seta"),
+            (TOK_WHITESPACE, " "),
+            (TOK_DOLLARWORD, "$__saved_targ"),
+            (TOK_WHITESPACE, " "),
+            (TOK_WORD, "targ"),
+            (TOK_NEWLINE, "\n"), # todo: newline style
+            (TOK_WHITESPACE, indent),
+            (TOK_WORD, "targ"),
+            (TOK_WHITESPACE, " "),
+            (TOK_WORD, toplevel["targ"]),
+            (TOK_NEWLINE, "\n"),
+            (TOK_WHITESPACE, indent),
+        ] + tokens[toplevel["start_token"]+2:toplevel["end_token"]+1] + [
+            (TOK_NEWLINE, "\n"),
+            (TOK_WHITESPACE, indent),
+            (TOK_WORD, "targ"),
+            (TOK_WHITESPACE, " "),
+            (TOK_DOLLARWORD, "$__saved_targ"),
+        ]))
+        
+        for i in range(toplevel["start_token"], toplevel["end_token"]+1):
+            tokens[i] = (TOK_WHITESPACE, '')
+    
+    for insertion_point, toks in reversed(insertions):
+        for t in reversed(toks):
+            tokens.insert(insertion_point, t)
+        
+    tokens = namedvariables_to_vaxx(tokens)
     
     out = ""
     for t in tokens:

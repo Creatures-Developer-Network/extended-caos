@@ -345,17 +345,35 @@ def print_node(t):
     else:
         raise Exception("unhandled node type %s" % t["type"])
 
-def move_comments_to_beginning_of_line(tokens):
+def move_comments_to_own_line(tokens):
     tokens = tokens[:]
 
+    newline_style = '\n'
+    for nt in tokens:
+        if nt[0] == TOK_NEWLINE:
+            newline_style = nt[1]
+            break
+
     i = 0
-    last_newline = None
+    last_newline = -1 # hack if we haven't seen a newline yet
+    last_indent = ''
     while i < len(tokens):
         t = tokens[i]
         if t[0] == TOK_EOI:
             break
+        # bookkeeping for newlines and indentation
+        if t[0] == TOK_NEWLINE and i + 1 < len(tokens):
+            if tokens[i+1][0] == TOK_WHITESPACE:
+                last_indent = tokens[i+1][1]
+            else:
+                last_indent = ''
+        if i == 0 and t[0] == TOK_WHITESPACE:
+            last_indent = t[1]
         if t[0] == TOK_NEWLINE:
             last_newline = i
+            i += 1
+            continue
+        # only care about comments
         if t[0] != TOK_COMMENT:
             i += 1
             continue
@@ -363,32 +381,28 @@ def move_comments_to_beginning_of_line(tokens):
         if i == 0 or tokens[i - 1][0] == TOK_NEWLINE:
             i += 1
             continue
-        # just need to strip the whitespace
+        # already on own line
         if tokens[i-1][0] == TOK_WHITESPACE and (i == 1 or tokens[i-2][0] == TOK_NEWLINE):
-            del tokens[i-1]
+            i += 1
             continue
-        # move to beginning of line
+        # need to move to previous line
+        # delete from here, and delete preceding whitespace
         del tokens[i]
         if i >= 1 and tokens[i-1][0] == TOK_WHITESPACE:
             del tokens[i-1]
-        if last_newline is not None:
-            tokens.insert(last_newline + 1, t)
-            tokens.insert(last_newline + 2, tokens[last_newline]) # copy the newline
-        else:
-            newline_style = "\n"
-            for nt in tokens:
-                if nt[0] == TOK_NEWLINE:
-                    newline_style = nt[1]
-                    break
-            tokens.insert(0, t)
-            tokens.insert(1, (TOK_NEWLINE, newline_style))
-            last_newline = 1
-        i += 1
+        # figure out where to put it
+        i = last_newline + 1
+        if last_indent:
+            tokens.insert(i, (TOK_WHITESPACE, last_indent))
+            i += 1
+        tokens.insert(i, t)
+        tokens.insert(i + 1, (TOK_NEWLINE, newline_style))
+        i += 1 # on the newline we added, to do newline bookkeeping
     return tokens
 
 def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))    
-    tokens = move_comments_to_beginning_of_line(tokens)
+    tokens = move_comments_to_own_line(tokens)
     out = ""
     for t in tokens:
         out += str(t[1])

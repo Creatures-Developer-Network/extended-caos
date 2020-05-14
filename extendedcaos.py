@@ -12,13 +12,6 @@ def peek(s, index):
         return s[index]
     return None
 
-class script:
-    def __init__(self, start, end, vaxx_vars, dollar_vars):
-        self.start = start
-        self.end = end
-        self.vaxx_vars = vaxx_vars
-        self.dollar_vars = dollar_vars
-
 class ParserState:
     __slots__ = ['p', 'tokens']
     def __init__(self, tokens):
@@ -400,9 +393,53 @@ def move_comments_to_own_line(tokens):
         i += 1 # on the newline we added, to do newline bookkeeping
     return tokens
 
+class script:
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+        self.vaxx_vars = []
+        self.dollar_vars = []
+
+def namedvariables_to_vaxx(tokens):
+    tokens = tokens[:]
+    scripts = [script(0, 0)]
+
+    # find script extents
+    # TODO: expose this elsewhere too?
+    for i, t in enumerate(tokens):
+        if t[0] == TOK_WORD and t[1].lower() in ("scrp", "rscr"):
+            scripts.append(script(i, i))
+            continue
+        if t[0] == TOK_WORD and re.match(r"(?i)^va\d\d$", t[1]):
+            if t[1].lower() not in scripts[-1].vaxx_vars:
+                scripts[-1].vaxx_vars.append(t[1].lower())
+        if t[0] == TOK_DOLLARWORD:
+            if t[1] not in scripts[-1].dollar_vars:
+                scripts[-1].dollar_vars.append(t[1])
+        scripts[-1].end = i
+
+    # for each script, map named variables to actual variables, then replace the
+    # tokens
+    for s in scripts:
+        var_mapping = {}
+        for d in s.dollar_vars:
+            possibles = ["va{:02}".format(i) for i in range(100) if "va{:02}".format(i) not in (list(s.vaxx_vars) + var_mapping.values())]
+            if not possibles:
+                raise Exception("Couldn't allocate variable for '%s'" % d)
+            var_mapping[d] = possibles[0]
+        for i in range(s.start, s.end):
+            if tokens[i][0] == TOK_DOLLARWORD:
+                tokens[i] = (TOK_WORD, var_mapping[tokens[i][1]])
+    
+    return tokens
+
 def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))    
     tokens = move_comments_to_own_line(tokens)
+    tokens = namedvariables_to_vaxx(tokens)
+    
+    # parse(tokens)
+    
     out = ""
     for t in tokens:
         out += str(t[1])

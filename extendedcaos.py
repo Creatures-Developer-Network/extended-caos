@@ -1,4 +1,5 @@
 import collections
+import itertools
 import json
 import re
 import string
@@ -423,7 +424,7 @@ def namedvariables_to_vaxx(tokens):
     for s in scripts:
         var_mapping = {}
         for d in s.dollar_vars:
-            possibles = ["va{:02}".format(i) for i in range(100) if "va{:02}".format(i) not in (list(s.vaxx_vars) + var_mapping.values())]
+            possibles = ["va{:02}".format(i) for i in range(100) if "va{:02}".format(i) not in itertools.chain(s.vaxx_vars, var_mapping.values())]
             if not possibles:
                 raise Exception("Couldn't allocate variable for '%s'" % d)
             var_mapping[d] = possibles[0]

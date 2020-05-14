@@ -1,0 +1,442 @@
+**CAOS2PRAY
+*# Pray-File "elevines.agents"
+*# DS-Name "Elevines"
+*# Depend blnk.c16
+*# attach elevinehelp.catalogue elevines.c16
+*# desc = "An easy-to-use custom elevator system. Read the help file included for details. Lovely sprites by Mea."
+*# Agent Animation File = "elevines.c16"
+*# Agent Sprite First Image = 4
+*# Agent Animation Gallery = "elevines"
+*# Web URL = "naturingnurturing.blogspot.com"
+*# Web Label = "Naturing :: Nurturing"
+
+*lift teleporting ball things.
+new: comp 3 1 21051 "elevines" 13 4 2000
+
+*Inject it where it belongs:
+*Why are you including a C3 inject script when this isn't even C3 compatible?
+*Probably because I am lazy and just want to copypaste my install script....
+doif gnam eq "Docking Station"
+	setv $creatorx game "CreatorX"
+	setv $creatory game "CreatorY"
+	doif $creatorx eq 0 and $creatory eq 0
+		setv $creatorx 6110
+		setv $creatory 9200
+	endi
+	doif tmvt $creatorx $creatory eq 1
+		mvto $creatorx $creatory
+	else
+		mvsf $creatorx $creatory
+	endi
+elif gnam eq "Creatures 3"
+	doif tmvt 5671 3599 eq 1
+		mvto 5671 3599
+	else
+		mvsf 5671 3599
+	endi
+endi
+
+clac 1000
+
+bhvr 3
+*activate 1 (1) activate 2 (2)
+
+tick 30
+
+
+attr 198
+*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
+
+accg 30
+elas 20
+fric 100
+perm 100
+
+object_variable $unique_pose ov96
+object_variable $unique_tintr ov97
+object_variable $unique_tintg ov98
+object_variable $unique_tintb ov99
+
+*ov98 and 99 are going to be the random tints, ov97 is the random -pose-
+setv ov96 rand 0 12
+setv ov97 rand 50 200
+setv ov98 rand 50 200
+setv ov99 rand 50 200
+pose ov96
+tint ov97 ov98 ov99 128 128
+
+*We'll base your ID number off your tints, just for fun:
+sets ov00 vtos ov97
+adds ov00 vtos ov98
+adds ov00 vtos ov99
+
+*parts-- 1, top button, 2, bottom
+pat: dull 1 "elevines" 0 6 21 1
+pat: dull 2 "elevi\nesd\d .. dd" 2 12 72 1
+
+
+*Push -- Want to go up
+scrp 3 1 21051 1
+	inst
+	lock
+*first off, is it actually possible to go up?
+
+*check where you are
+	setv ov10 posy
+*set the little serchagent to null
+	seta $targetring null
+*enum through other circles
+	enum 3 1 21051
+
+*only check ones of your code
+		doif mv00 eq ov00
+
+*see if it's on a higher level-- that is, the y coord is less than mv10
+			doif posy lt mv10
+*herein lies the tricky part-- you want it to be lower than the ring
+*being pushed, but higher than the rest.
+*so NOW check to see if a previous agent has been found
+				doif $targetring = null
+*if not, make it the current favorite
+* so set the ring you just found into $targetring
+* and the y coord into $targetposy
+
+					seta $targetring targ
+					setv $targetposy posy
+*else, you have to check it against the current $targetposy to
+*make sure it's the highest-lower y coord
+				else
+					doif posy gt $targetposy
+						seta $targetring targ
+						setv $targetposy posy
+					endi
+				endi
+			endi
+		endi
+	next
+*So $targetring should be the ideal ring to tele to now
+*assuming there is one.
+*if there's NOT, stop this whole thing now!
+	doif $targetring eq null
+
+*make sure there's a FROM creature
+		doif from ne null
+*who pushed you?
+			doif from.fmly = 4
+*put a bug in it's ear-- stop pushing this!
+
+				urge writ from 26 -2 -1 2
+				sndc "buzz"
+*disappointment
+				stim writ from 0 1
+				stop
+			else
+				stop
+
+			endi
+		else
+			stop
+		endi
+*else there IS a $targetring!
+	else
+*if it's being carried (like by the hand), stop
+		doif $targetring.movs ne 0
+			stop
+		endi
+*now, make sure there's a creature to move
+		doif from ne null
+			doif from.fmly = 4
+*Lock it out from creatures for a second!
+				$targetring.tick tick
+				$targetring.attr 214
+
+*now targ the norn
+*make sure it's not being carried
+				doif from.movs ne 0
+					stop
+				endi
+*Make sure it's a VALID place to move it!
+*and move it!
+				doif from.tmvf $targetring.posx $targetring.posb = 1
+					from.mvft $targetring.posx $targetring.posb
+
+*tell the norn it just travled
+*and it needs to wait?
+*tell the norn to STOP now..
+*and make some dingysound
+					stim writ from 94 1
+					stim writ from 75 1
+					urge writ from 26 -2 -1 2
+					sndc "snap"
+				else
+*if it's not a VALID PLACE make a sndc
+					sndc "buzz"
+					stop
+				endi
+			else
+				stop
+			endi
+
+		endi
+	endi
+endm
+
+*Pull -- Want to go down
+scrp 3 1 21051 2
+	inst
+*first off, is it actually possible to go DOWN?
+
+*check where you are
+	setv ov10 posy
+*set the little serchagent to null
+	seta $targetring null
+*enum through other circles
+	enum 3 1 21051
+
+*only check ones of your code
+		doif mv00 eq ov00
+
+
+
+*see if it's on a higher level-- that is, the y coord is GREATER than mv10
+			doif posy gt mv10
+*herein lies the tricky part-- you want it to be lower than the ring
+*being pushed, but higher than the rest.
+*so NOW check to see if a previous agent has been found
+				doif $targetring eq null
+*if not, make it the current favorite
+* so set the ring you just found into $targetring
+* and the y coord into $targetposy
+
+					seta $targetring targ
+					setv $targetposy posy
+*else, you have to check it against the current $targetposy to
+*make sure it's the lowest-higher y coord
+				else
+					doif posy lt $targetposy
+						seta $targetring targ
+						setv $targetposy posy
+					endi
+				endi
+			endi
+		endi
+	next
+*So $targetring should be the ideal ring to tele to now
+*assuming there is one.
+*if there's NOT, stop this whole thing now!
+	doif $targetring eq null
+
+*make sure there's a FROM creature
+		doif from ne null
+*who pushed you?
+			seta $fromcreature from
+			targ $fromcreature
+			doif fmly = 4
+*put a bug in it's ear-- stop pulling this!
+
+*hi
+
+				sndc "buzz"
+
+				urge writ targ 26 -2 -1 2
+*disappointment
+				stim writ $fromcreature 0 1
+				stop
+			else
+				stop
+
+			endi
+		else
+			stop
+		endi
+*else there IS a $targetring!
+	else
+*if it's being carried (like by the hand), stop
+		targ $targetring
+		doif movs ne 0
+			sndc "buzz"
+			stop
+		endi
+*now, make sure there's a creature to move
+		doif from ne null
+			doif from.fmly = 4
+*set the coords of $targetring into $targetposx and $targetposb
+*Lock it out from creatures for a second!
+				$targetring.tick $targetring.tick
+				$targetring.attr 214
+
+*now targ the norn
+*make sure it's not being carried
+				doif from.movs ne 0
+					stop
+				endi
+*Make sure it's a VALID place to move it!
+				doif from.tmvf $targetring.posx $targetring.posb = 1
+*and move it!
+					from.mvft $targetposx $targetposb
+*tell the norn it just travled
+					stim writ from 94 1
+*tell the norn to STOP now..
+					urge writ from 26 -2 -1 2
+*wait?
+					stim writ from 75 1
+*and make some dingysound
+					sndc "snap"
+
+
+				else
+*if it's not a VALID PLACE make a sndc
+					sndc "buzz"
+					stop
+				endi
+			else
+				stop
+			endi
+
+		endi
+	endi
+endm
+
+
+*you've been CLICKED or clac'd or something
+scrp 3 1 21051 1000
+	inst
+*Here is how it works....
+*shift+click creates a copy of the same OV
+*ctrl+click creates a copy of a new OV
+*shift+click kills it.
+	sndc "opn1"
+*shift -- make a copy, save OV, same tint
+	doif keyd 16 eq 1 and keyd 17 eq 0
+		sndc "opn1"
+
+		new: comp 3 1 21051 "elevines" 13 4 2000
+
+*move it to the old one, and make it hop a bit
+		mvsf ownr.posl ownr.post
+		velo 15 100
+
+		clac 1000
+
+		bhvr 3
+*activate 1 (1) activate 2 (2)
+		tick 30
+
+		attr 198
+*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
+
+		accg 30
+		elas 20
+		fric 100
+		perm 100
+
+
+*ov97, 96, 98 and 99 are going to be COPIED
+		setv ov96 mv96
+		setv ov97 mv97
+		setv ov98 mv98
+		setv ov99 mv99
+		pose ov96
+		tint ov97 ov98 ov99 128 128
+
+*We'll base your ID number off your tints, just for fun:
+		sets ov00 vtos ov97
+		adds ov00 vtos ov98
+		adds ov00 vtos ov99
+
+*parts-- 1, top button, 2, bottom
+		pat: dull 1 "elevines" 0 6 21 1
+		pat: dull 2 "elevines" 2 12 72 1
+
+
+*ctrl
+	elif keyd 16 eq 0 and keyd 17 eq 1
+		sndc "unlk"
+*lift teleporting ball things.
+		new: comp 3 1 21051 "elevines" 13 4 2000
+
+*move it to the old one, and make it hop a bit
+		mvsf ownr.posl ownr.post
+		velo 15 100
+		clac 1000
+
+		bhvr 3
+*activate 1 (1) activate 2 (2)
+		tick 30
+
+		attr 198
+*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
+
+		accg 30
+		elas 20
+		fric 100
+		perm 100
+
+*ov98 and 99 are going to be the random tints, ov96 is the random -pose-
+		setv ov96 rand 0 12
+		setv ov97 rand 50 200
+		setv ov98 rand 50 200
+		setv ov99 rand 50 200
+		pose ov96
+		tint ov97 ov98 ov99 128 128
+
+*We'll base your ID number off your tints, just for fun:
+		sets ov00 vtos ov97
+		adds ov00 vtos ov98
+		adds ov00 vtos ov99
+
+*parts-- 1, top button, 2, bottom
+		pat: dull 1 "elevines" 0 6 21 1
+		pat: dull 2 "elevines" 2 12 72 1
+
+*both
+	elif keyd 16 eq 1 and keyd 17 eq 1
+		kill ownr
+	endi
+endm
+
+*Meh. I tried to avoid using a timer for this but it's just
+*SO MUCH MORE FLUID with it. ]:
+scrp 3 1 21051 9
+	inst
+
+*reset the attr if it's been changed
+	attr 198
+*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
+
+*the indicator orbs change color. Yay.
+	setv $ishigher 0
+	setv $islower 0
+*check where you are
+	setv ov10 posy
+*enum through other circles
+	enum 3 1 21051
+
+*only check ones of your code
+		doif mv00 eq ov00
+
+*see if it's on a higher level-- that is, the y coord is less than mv10
+			doif posy lt mv10
+				setv $ishigher 1
+*lower?
+			elif posy gt mv10
+				setv $islower 1
+			endi
+		endi
+	next
+*pose accordingly!
+	part 1
+	pose $ishigher
+	part 2
+	pose $islower
+endm
+
+rscr
+enum 3 1 21051
+	dbg: outv $hello
+	kill targ
+next
+* extended stuff
+dbg: outv ownr.posy
+from.mvsf 5 6
+

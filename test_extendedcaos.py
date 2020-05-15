@@ -3,38 +3,38 @@ import unittest
 
 
 class TestExtendedCAOS(unittest.TestCase):
-    maxDiff = 2048
+    maxDiff = 999999999
 
     def test_idempotent(self):
         s = '  * hello\nnew: comp 3 1 21051 "elevines" 13 4 2000'
-        self.assertEqual(s, extendedcaos_to_caos(s))
+        self.assertMultiLineEqual(s, extendedcaos_to_caos(s))
 
     def test_moves_comments_to_own_line(self):
         input = "    stop* open cd tray\nstop"
         desired_output = "    * open cd tray\n    stop\nstop"
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = "    stop  * open cd tray\nstop"
         desired_output = "    * open cd tray\n    stop\nstop"
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = "    stop  * open cd tray\n* another"
         desired_output = "    * open cd tray\n    stop\n* another"
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = "    stop  * open cd tray\n * another"
         desired_output = "    * open cd tray\n    stop\n * another"
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = "    * open cd tray"
         desired_output = "    * open cd tray"
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
     def test_parses_comment_at_eoi(self):
         s = "* comment at eoi"
-        self.assertEqual(s, extendedcaos_to_caos(s))
+        self.assertMultiLineEqual(s, extendedcaos_to_caos(s))
         s = "* comment at eoi\n"
-        self.assertEqual(s, extendedcaos_to_caos(s))
+        self.assertMultiLineEqual(s, extendedcaos_to_caos(s))
 
     def test_named_variables(self):
         input = """
@@ -105,7 +105,7 @@ class TestExtendedCAOS(unittest.TestCase):
                 setv va00 posy
             next
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
     def test_explicit_targ(self):
         input = """
@@ -128,7 +128,7 @@ class TestExtendedCAOS(unittest.TestCase):
             targ va00
             dbg: outv va01
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = """
             dbg: outv angl va00.posx va00.posy
@@ -144,7 +144,7 @@ class TestExtendedCAOS(unittest.TestCase):
             targ va01
             dbg: outv angl va02 va03
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = """
             dbg: outv from.angl va00.posx va00.posy
@@ -164,7 +164,7 @@ class TestExtendedCAOS(unittest.TestCase):
             targ va01
             dbg: outv va04
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = """
             doif $targetring.movs ne 0
@@ -176,7 +176,7 @@ class TestExtendedCAOS(unittest.TestCase):
             targ va00
             doif va02 ne 0
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
         input = """
             dbg: outv $targetring.movs
@@ -200,7 +200,36 @@ class TestExtendedCAOS(unittest.TestCase):
             targ va00
             seta va99 va04
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+    def test_explicit_targ_in_doif(self):
+        input = """
+            doif movs <> 0
+                dbg: outv 0
+                doif 0 < 1
+                endi
+            elif posy > ownr.posy
+                dbg: outv 1
+            else
+                dbg: outv 2
+            endi
+        """
+        desired_output = """
+            seta va00 targ
+            targ ownr
+            setv va01 posy
+            targ va00
+            doif movs <> 0
+                dbg: outv 0
+                doif 0 < 1
+                endi
+            elif posy > va01
+                dbg: outv 1
+            else
+                dbg: outv 2
+            endi
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
     def test_object_variables(self):
         input = """
@@ -215,7 +244,7 @@ class TestExtendedCAOS(unittest.TestCase):
             subv mv63 2
             subv avar from 63 3
         """
-        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
 
 if __name__ == "__main__":

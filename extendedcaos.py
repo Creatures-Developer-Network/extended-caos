@@ -249,20 +249,44 @@ def explicit_targs_visitor(node, tokens, statement_start):
         return []
 
 
+def get_doif_for(parsetree, p):
+    assert parsetree[p]["type"] == "Command"
+    assert parsetree[p]["name"] == "elif"
+
+    nesting = 0
+
+    while True:
+        p -= 1
+        if parsetree[p]["type"] == "Command" and parsetree[p]["name"] == "endi":
+            nesting += 1
+        elif parsetree[p]["type"] == "Command" and parsetree[p]["name"] == "doif":
+            if nesting == 0:
+                return parsetree[p]
+            else:
+                nesting -= 1
+    raise Exception("Couldn't find matching doif")
+
+
 def explicit_targs(tokens):
     tokens = tokens[:]
     parsetree = parse(tokens)
 
     insertions = []
-    for toplevel in parsetree:
+    for i, toplevel in enumerate(parsetree):
         if toplevel["type"] not in ("Command", "Condition", "DotCommand"):
             continue
         indent = get_indentation_at(tokens, toplevel["start_token"])
+
+        insertion_point = toplevel["start_token"]
+        if toplevel["type"] == "Command" and toplevel["name"] == "elif":
+            # uh-oh. go find last doif
+            matching_doif = get_doif_for(parsetree, i)
+            insertion_point = matching_doif["start_token"]
+
         for a in toplevel["args"]:
-            insertions += explicit_targs_visitor(a, tokens, toplevel["start_token"])
+            insertions += explicit_targs_visitor(a, tokens, insertion_point)
 
         if toplevel["type"] == "DotCommand":
-            insertion_point = toplevel["start_token"]
             saved_targ_variable = object()
             insertions.append(
                 (
@@ -292,8 +316,8 @@ def explicit_targs(tokens):
                 )
             )
 
-            for i in range(toplevel["start_token"], toplevel["end_token"] + 1):
-                tokens[i] = (TOK_WHITESPACE, "")
+            for j in range(toplevel["start_token"], toplevel["end_token"] + 1):
+                tokens[j] = (TOK_WHITESPACE, "")
 
     for insertion_point, toks in reversed(insertions):
         for t in reversed(toks):

@@ -38,12 +38,12 @@ scrp 3 1 21051 1
     setv va02 posy
     targ va01
     doif mv99 = ov99 and posy < va02
-      doif va00 = null
-        seta va00 targ
       seta va01 targ
       targ va00
       setv va03 posy
       targ va01
+      doif va00 = null
+        seta va00 targ
       elif posy > va03
         seta va00 targ
       endi

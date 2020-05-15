@@ -275,18 +275,97 @@ def remove_dummies(tokens):
         newtokens.append(t)
     return newtokens
 
+def objectvariables_to_ovxx(tokens):
+    tokens = tokens[:]
+    
+    # build object variable mapping
+    var_mapping = {}
+    i = 0
+    while i < len(tokens):
+        if not (tokens[i][0] == TOK_WORD and tokens[i][1] == "agent_variable"):
+            i += 1
+            continue
+        startp = i
+        i += 1
+        
+        if tokens[i][0] not in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
+            raise Exception("Expected whitespace after 'agent_variable', got %s %s" % tokens[i])
+        while tokens[i][0] in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
+            i += 1
+        
+        if not (tokens[i][0] == TOK_WORD and tokens[i][1][0] == "$"):
+            raise Exception("Expected variable name after 'agent_variable', got %s %s" % tokens[i])
+        variable_name = tokens[i][1]
+        i += 1
+        
+        if tokens[i][0] not in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
+            raise Exception("Expected whitespace after '%s', got %s %s" % (variable_name, tokens[i][0], tokens[i][1]))
+        while tokens[i][0] in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
+            i += 1
+        
+        if not (tokens[i][0] == TOK_WORD and re.match(r"(?i)^ov\d\d$", tokens[i][1])):
+            raise Exception("Expected ovXX after '%s', got %s %s" % (variable_name, tokens[i][0], tokens[i][1]))
+        variable_definition = tokens[i][1]
+        i += 1
+        
+        while tokens[i][0] == TOK_WHITESPACE:
+            i += 1
+        if tokens[i][0] not in (TOK_NEWLINE, TOK_EOI):
+            raise Exception("Expected newline after agent_variable directive, got %s %s" % tokens[i])
+        endp = i
+        i += 1
+        
+        var_mapping[variable_name] = variable_definition
+        
+        for j in range(startp, endp):
+            tokens[j] = (TOK_WHITESPACE, '')
+    
+    # do replacements
+    insertions = []
+    i = 0
+    while i < len(tokens):
+        if not (tokens[i][0] == TOK_WORD and tokens[i + 1][0] == TOK_DOT and tokens[i + 2][0] == TOK_WORD and tokens[i+2][1][0] == "$"):
+            i += 1
+            continue
+        variable_name = tokens[i+2][1]
+        if tokens[i][1].lower() == "targ":
+            insertions.append((i, [
+                (TOK_WORD, "ov" + var_mapping[variable_name][2:4]),
+            ]))
+        elif tokens[i][1].lower() == "ownr":
+            insertions.append((i, [
+                (TOK_WORD, "mv" + var_mapping[variable_name][2:4]),
+            ]))
+        else:
+            insertions.append((i, [
+                (TOK_WORD, "avar"),
+                (TOK_WHITESPACE, " "),
+                tokens[i],
+                (TOK_WHITESPACE, " "),
+                (TOK_INTEGER, int(var_mapping[variable_name][2:4])),
+            ]))
+        tokens[i] = (TOK_WHITESPACE, '')
+        tokens[i + 1] = (TOK_WHITESPACE, '')
+        tokens[i + 2] = (TOK_WHITESPACE, '')
+        i += 3
+    
+    for insertion_point, toks in reversed(insertions):
+        for t in reversed(toks):
+            tokens.insert(insertion_point, t)
+    
+    return tokens
+
 def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))
     tokens = move_comments_to_own_line(tokens)
+    tokens = remove_dummies(tokens)
+    tokens = objectvariables_to_ovxx(tokens)
     tokens = remove_dummies(tokens)
     tokens = explicit_targs(tokens)
     tokens = remove_dummies(tokens)
     tokens = namedvariables_to_vaxx(tokens)
     tokens = remove_dummies(tokens)
-    
-    # parsetree = parse(tokens)
-    # print(json.dumps(parsetree, indent=2))
-    
+        
     out = ""
     for t in tokens:
         out += str(t[1])

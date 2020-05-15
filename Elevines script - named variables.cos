@@ -10,6 +10,12 @@
 *# Web URL = "naturingnurturing.blogspot.com"
 *# Web Label = "Naturing :: Nurturing"
 
+agent_variable $unique_pose ov96
+agent_variable $unique_tintr ov97
+agent_variable $unique_tintg ov98
+agent_variable $unique_tintb ov99
+agent_variable $unique_id ov00
+
 *lift teleporting ball things.
 new: comp 3 1 21051 "elevines" 13 4 2000
 
@@ -52,23 +58,18 @@ elas 20
 fric 100
 perm 100
 
-object_variable $unique_pose ov96
-object_variable $unique_tintr ov97
-object_variable $unique_tintg ov98
-object_variable $unique_tintb ov99
-
-*ov98 and 99 are going to be the random tints, ov97 is the random -pose-
-setv ov96 rand 0 12
-setv ov97 rand 50 200
-setv ov98 rand 50 200
-setv ov99 rand 50 200
-pose ov96
-tint ov97 ov98 ov99 128 128
+*targ.$unique_tintg and 99 are going to be the random tints, targ.$unique_tintr is the random -pose-
+setv targ.$unique_pose rand 0 12
+setv targ.$unique_tintr rand 50 200
+setv targ.$unique_tintg rand 50 200
+setv targ.$unique_tintb rand 50 200
+pose targ.$unique_pose
+tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
 
 *We'll base your ID number off your tints, just for fun:
-sets ov00 vtos ov97
-adds ov00 vtos ov98
-adds ov00 vtos ov99
+sets targ.$unique_id vtos targ.$unique_tintr
+adds targ.$unique_id vtos targ.$unique_tintg
+adds targ.$unique_id vtos targ.$unique_tintb
 
 *parts-- 1, top button, 2, bottom
 pat: dull 1 "elevines" 0 6 21 1
@@ -82,17 +83,16 @@ scrp 3 1 21051 1
 *first off, is it actually possible to go up?
 
 *check where you are
-	setv ov10 posy
 *set the little serchagent to null
 	seta $targetring null
 *enum through other circles
 	enum 3 1 21051
 
 *only check ones of your code
-		doif mv00 eq ov00
+		doif ownr.$unique_id eq targ.$unique_id
 
 *see if it's on a higher level-- that is, the y coord is less than mv10
-			doif posy lt mv10
+			doif posy lt ownr.posy
 *herein lies the tricky part-- you want it to be lower than the ring
 *being pushed, but higher than the rest.
 *so NOW check to see if a previous agent has been found
@@ -100,15 +100,12 @@ scrp 3 1 21051 1
 *if not, make it the current favorite
 * so set the ring you just found into $targetring
 * and the y coord into $targetposy
-
 					seta $targetring targ
-					setv $targetposy posy
 *else, you have to check it against the current $targetposy to
 *make sure it's the highest-lower y coord
 				else
-					doif posy gt $targetposy
+					doif posy gt $targetring.posy
 						seta $targetring targ
-						setv $targetposy posy
 					endi
 				endi
 			endi
@@ -132,7 +129,6 @@ scrp 3 1 21051 1
 				stop
 			else
 				stop
-
 			endi
 		else
 			stop
@@ -187,19 +183,16 @@ scrp 3 1 21051 2
 *first off, is it actually possible to go DOWN?
 
 *check where you are
-	setv ov10 posy
 *set the little serchagent to null
 	seta $targetring null
 *enum through other circles
 	enum 3 1 21051
 
 *only check ones of your code
-		doif mv00 eq ov00
-
-
+		doif ownr.$unique_id eq targ.$unique_id
 
 *see if it's on a higher level-- that is, the y coord is GREATER than mv10
-			doif posy gt mv10
+			doif posy gt ownr.posy
 *herein lies the tricky part-- you want it to be lower than the ring
 *being pushed, but higher than the rest.
 *so NOW check to see if a previous agent has been found
@@ -209,13 +202,11 @@ scrp 3 1 21051 2
 * and the y coord into $targetposy
 
 					seta $targetring targ
-					setv $targetposy posy
 *else, you have to check it against the current $targetposy to
 *make sure it's the lowest-higher y coord
 				else
-					doif posy lt $targetposy
+					doif posy lt $targetring.posy
 						seta $targetring targ
-						setv $targetposy posy
 					endi
 				endi
 			endi
@@ -229,18 +220,16 @@ scrp 3 1 21051 2
 *make sure there's a FROM creature
 		doif from ne null
 *who pushed you?
-			seta $fromcreature from
-			targ $fromcreature
-			doif fmly = 4
+			doif from.fmly = 4
 *put a bug in it's ear-- stop pulling this!
 
 *hi
 
 				sndc "buzz"
 
-				urge writ targ 26 -2 -1 2
+				urge writ from 26 -2 -1 2
 *disappointment
-				stim writ $fromcreature 0 1
+				stim writ from 0 1
 				stop
 			else
 				stop
@@ -252,8 +241,7 @@ scrp 3 1 21051 2
 *else there IS a $targetring!
 	else
 *if it's being carried (like by the hand), stop
-		targ $targetring
-		doif movs ne 0
+		doif $targetring.movs ne 0
 			sndc "buzz"
 			stop
 		endi
@@ -331,18 +319,18 @@ scrp 3 1 21051 1000
 		perm 100
 
 
-*ov97, 96, 98 and 99 are going to be COPIED
-		setv ov96 mv96
-		setv ov97 mv97
-		setv ov98 mv98
-		setv ov99 mv99
-		pose ov96
-		tint ov97 ov98 ov99 128 128
+*targ.$unique_tintr, 96, 98 and 99 are going to be COPIED
+		setv targ.$unique_pose ownr.$unique_pose
+		setv targ.$unique_tintr ownr.$unique_tintr
+		setv targ.$unique_tintg ownr.$unique_tintg
+		setv targ.$unique_tintb ownr.$unique_tintb
+		pose targ.$unique_pose
+		tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
 
 *We'll base your ID number off your tints, just for fun:
-		sets ov00 vtos ov97
-		adds ov00 vtos ov98
-		adds ov00 vtos ov99
+		sets targ.$unique_id vtos targ.$unique_tintr
+		adds targ.$unique_id vtos targ.$unique_tintg
+		adds targ.$unique_id vtos targ.$unique_tintb
 
 *parts-- 1, top button, 2, bottom
 		pat: dull 1 "elevines" 0 6 21 1
@@ -372,18 +360,18 @@ scrp 3 1 21051 1000
 		fric 100
 		perm 100
 
-*ov98 and 99 are going to be the random tints, ov96 is the random -pose-
-		setv ov96 rand 0 12
-		setv ov97 rand 50 200
-		setv ov98 rand 50 200
-		setv ov99 rand 50 200
-		pose ov96
-		tint ov97 ov98 ov99 128 128
+*targ.$unique_tintg and 99 are going to be the random tints, targ.$unique_pose is the random -pose-
+		setv targ.$unique_pose rand 0 12
+		setv targ.$unique_tintr rand 50 200
+		setv targ.$unique_tintg rand 50 200
+		setv targ.$unique_tintb rand 50 200
+		pose targ.$unique_pose
+		tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
 
 *We'll base your ID number off your tints, just for fun:
-		sets ov00 vtos ov97
-		adds ov00 vtos ov98
-		adds ov00 vtos ov99
+		sets targ.$unique_id vtos targ.$unique_tintr
+		adds targ.$unique_id vtos targ.$unique_tintg
+		adds targ.$unique_id vtos targ.$unique_tintb
 
 *parts-- 1, top button, 2, bottom
 		pat: dull 1 "elevines" 0 6 21 1
@@ -408,18 +396,17 @@ scrp 3 1 21051 9
 	setv $ishigher 0
 	setv $islower 0
 *check where you are
-	setv ov10 posy
 *enum through other circles
 	enum 3 1 21051
 
 *only check ones of your code
-		doif mv00 eq ov00
+		doif mv00 eq targ.$unique_id
 
 *see if it's on a higher level-- that is, the y coord is less than mv10
-			doif posy lt mv10
+			doif posy lt ownr.posy
 				setv $ishigher 1
 *lower?
-			elif posy gt mv10
+			elif posy gt ownr.posy
 				setv $islower 1
 			endi
 		endi
@@ -433,10 +420,5 @@ endm
 
 rscr
 enum 3 1 21051
-	dbg: outv $hello
 	kill targ
 next
-* extended stuff
-dbg: outv ownr.posy
-from.mvsf 5 6
-

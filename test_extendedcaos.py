@@ -128,7 +128,7 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outv va01
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-        
+    
         input = """
             dbg: outv angl va00.posx va00.posy
         """
@@ -144,7 +144,7 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outv angl va02 va03
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-        
+    
         input = """
             dbg: outv from.angl va00.posx va00.posy
         """
@@ -164,7 +164,7 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outv va04
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-        
+    
         input = """
             doif $targetring.movs ne 0
         """
@@ -176,7 +176,7 @@ class TestExtendedCAOS(unittest.TestCase):
             doif va02 ne 0
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-        
+    
         input = """
             dbg: outv $targetring.movs
             dbg: outs $targetring.gall
@@ -198,6 +198,21 @@ class TestExtendedCAOS(unittest.TestCase):
             seta va04 carr
             targ va00
             seta va99 va04
+        """
+        self.assertEqual(desired_output, extendedcaos_to_caos(input))
+    
+    def test_object_variables(self):
+        input = """
+            agent_variable $bioenergy ov63
+            subv targ.$bioenergy 1
+            subv ownr.$bioenergy 2
+            subv from.$bioenergy 3
+        """
+        desired_output = """
+            
+            subv ov63 1
+            subv mv63 2
+            subv avar from 63 3
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
     

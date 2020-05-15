@@ -369,6 +369,103 @@ def remove_dummies(tokens):
     return newtokens
 
 
+def remove_extraneous_targ_saving(tokens):
+    tokens = tokens[:]
+    for i in range(len(tokens)):
+        if not (tokens[i][0] == TOK_WORD and tokens[i][1].lower() == "targ"):
+            continue
+        p = i + 1
+        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            p += 1
+        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower()[0:2] == "va"):
+            continue
+        var_name = tokens[p][1]
+        p += 1
+        startdelp = p
+        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            p += 1
+        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == "seta"):
+            continue
+        p += 1
+        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            p += 1
+        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == var_name):
+            continue
+        p += 1
+        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            p += 1
+        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == "targ"):
+            continue
+        enddelp = p
+
+        for j in range(startdelp, enddelp + 1):
+            tokens[j] = (TOK_WHITESPACE, "")
+    return tokens
+
+
+def remove_double_targ(tokens):
+    tokens = tokens[:]
+    for i in range(len(tokens)):
+        p = i
+        startdelp = p
+        if not (tokens[i][0] == TOK_WORD and tokens[i][1].lower() == "targ"):
+            continue
+        p = i + 1
+        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            p += 1
+        if not tokens[p][0] == TOK_WORD:
+            continue
+        p += 1
+        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            p += 1
+        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == "targ"):
+            continue
+        enddelp = p - 1
+
+        for j in range(startdelp, enddelp + 1):
+            tokens[j] = (TOK_WHITESPACE, "")
+
+    tokes = remove_dummies(tokens)
+    parsetree = parse(tokens)
+
+    for i, toplevel in enumerate(parsetree):
+        if not (toplevel["type"] == "Command" and toplevel["name"] == "targ"):
+            continue
+        first_targ = toplevel["args"][0]
+
+        if not (first_targ["type"] == "Command" and first_targ["args"] == []):
+            continue
+        first_targ_name = first_targ["name"]
+
+        if not (i + 2 < len(parsetree)):
+            continue
+
+        second_targ = parsetree[i + 2]
+        if not (
+            second_targ["type"] == "Command"
+            and second_targ["name"] == "targ"
+            and second_targ["args"][0]["type"] == "Command"
+            and second_targ["args"][0]["name"] == first_targ_name
+        ):
+            continue
+
+        startp = second_targ["start_token"]
+        endp = second_targ["end_token"]
+
+        while startp > 0 and tokens[startp - 1][0] == TOK_WHITESPACE:
+            startp -= 1
+
+        while tokens[endp + 1][0] == TOK_WHITESPACE:
+            endp += 1
+        if tokens[endp + 1][0] == TOK_NEWLINE:
+            endp += 1
+
+        for j in range(startp, endp + 1):
+            tokens[j] = (TOK_WHITESPACE, "")
+
+    return tokens
+
+
 def objectvariables_to_ovxx(tokens):
     tokens = tokens[:]
 
@@ -481,6 +578,10 @@ def extendedcaos_to_caos(s):
     tokens = explicit_targs(tokens)
     tokens = remove_dummies(tokens)
     tokens = namedvariables_to_vaxx(tokens)
+    tokens = remove_dummies(tokens)
+    tokens = remove_extraneous_targ_saving(tokens)
+    tokens = remove_dummies(tokens)
+    tokens = remove_double_targ(tokens)
     tokens = remove_dummies(tokens)
 
     out = ""

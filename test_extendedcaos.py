@@ -117,12 +117,8 @@ class TestExtendedCAOS(unittest.TestCase):
             seta va00 targ
             targ from
             mvsf 5 6
-            targ va00
-            seta va00 targ
             targ ownr
             mvsf 6 5
-            targ va00
-            seta va00 targ
             targ from
             setv va01 angl 0 0
             targ va00
@@ -137,9 +133,6 @@ class TestExtendedCAOS(unittest.TestCase):
             seta va01 targ
             targ va00
             setv va02 posx
-            targ va01
-            seta va01 targ
-            targ va00
             setv va03 posy
             targ va01
             dbg: outv angl va02 va03
@@ -153,12 +146,7 @@ class TestExtendedCAOS(unittest.TestCase):
             seta va01 targ
             targ va00
             setv va02 posx
-            targ va01
-            seta va01 targ
-            targ va00
             setv va03 posy
-            targ va01
-            seta va01 targ
             targ from
             setv va04 angl va02 va03
             targ va01
@@ -249,6 +237,48 @@ class TestExtendedCAOS(unittest.TestCase):
             setv va05 tmvt va03 va04
             targ va01
             dbg: outv va05
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+    def test_remove_extraneous_targ_saving(self):
+        input = """
+            seta va01 targ
+            targ va00
+            setv va02 posx
+            targ va01
+            seta va01 targ
+            targ va00
+            setv va03 posy
+            targ va01
+            seta va01 targ
+            targ from
+            setv va04 angl va02 va03
+            targ va01
+            dbg: outv va04
+        """
+        desired_output = """
+            seta va01 targ
+            targ va00
+            setv va02 posx
+            setv va03 posy
+            targ from
+            setv va04 angl va02 va03
+            targ va01
+            dbg: outv va04
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+    def test_remove_double_targ(self):
+        input = """
+            targ ownr
+            targ va00
+            targ va01
+            setv va02 posx
+            targ va01
+        """
+        desired_output = """
+            targ va01
+            setv va02 posx
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 

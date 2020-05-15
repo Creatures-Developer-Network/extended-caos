@@ -13,7 +13,6 @@ class TokenType:
         return self.name
 
 TOK_COMMENT = TokenType("TOK_COMMENT")
-TOK_DOLLARWORD = TokenType("TOK_DOLLARWORD")
 TOK_INTEGER = TokenType("TOK_INTEGER")
 TOK_STRING = TokenType("TOK_STRING")
 TOK_NEWLINE = TokenType("TOK_NEWLINE")
@@ -59,7 +58,7 @@ def lexcaos(s):
                 raise Exception("Expected variable name after '$', got '%s' (%02x)" % (peek(s, p), ord(peek(s, p))))
             while peek(s, p) and peek(s, p) in string.ascii_letters + string.digits + "*:_":
                 p += 1
-            yield (TOK_DOLLARWORD, s[basep:p])
+            yield (TOK_WORD, s[basep:p])
         elif s[p] == "-":
             p += 1
             if peek(s, p) is None:
@@ -86,9 +85,24 @@ def lexcaos(s):
                     p += 2
                 else:
                     p += 1
+        elif s[p] == "<" and peek(s, p+1) == ">":
+            p += 2
+            yield (TOK_WORD, "<>")
+        elif s[p] == ">" and peek(s, p+1) == "=":
+            p += 2
+            yield (TOK_WORD, ">=")
+        elif s[p] == "<" and peek(s, + 1) == "=":
+            p += 2
+            yield (TOK_WORD, "<=")
         elif s[p] == "=":
             p += 1
             yield (TOK_WORD, "=")
+        elif s[p] == ">":
+            p += 1
+            yield (TOK_WORD, ">")
+        elif s[p] == "<":
+            p += 1
+            yield (TOK_WORD, "<")
         elif s[p] == "*":
             p += 1
             while peek(s, p) and peek(s, p) not in ("\r", "\n"):

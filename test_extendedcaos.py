@@ -1,40 +1,41 @@
 from extendedcaos import extendedcaos_to_caos
 import unittest
 
+
 class TestExtendedCAOS(unittest.TestCase):
     maxDiff = 2048
-    
+
     def test_idempotent(self):
-        s = "  * hello\nnew: comp 3 1 21051 \"elevines\" 13 4 2000"
+        s = '  * hello\nnew: comp 3 1 21051 "elevines" 13 4 2000'
         self.assertEqual(s, extendedcaos_to_caos(s))
-    
+
     def test_moves_comments_to_own_line(self):
         input = "    stop* open cd tray\nstop"
         desired_output = "    * open cd tray\n    stop\nstop"
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = "    stop  * open cd tray\nstop"
         desired_output = "    * open cd tray\n    stop\nstop"
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = "    stop  * open cd tray\n* another"
         desired_output = "    * open cd tray\n    stop\n* another"
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = "    stop  * open cd tray\n * another"
         desired_output = "    * open cd tray\n    stop\n * another"
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = "    * open cd tray"
         desired_output = "    * open cd tray"
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
     def test_parses_comment_at_eoi(self):
         s = "* comment at eoi"
         self.assertEqual(s, extendedcaos_to_caos(s))
         s = "* comment at eoi\n"
         self.assertEqual(s, extendedcaos_to_caos(s))
-    
+
     def test_named_variables(self):
         input = """
             sets $hello 5
@@ -105,7 +106,7 @@ class TestExtendedCAOS(unittest.TestCase):
             next
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
     def test_explicit_targ(self):
         input = """
             from.mvsf 5 6
@@ -128,7 +129,7 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outv va01
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = """
             dbg: outv angl va00.posx va00.posy
         """
@@ -144,7 +145,7 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outv angl va02 va03
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = """
             dbg: outv from.angl va00.posx va00.posy
         """
@@ -164,7 +165,7 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outv va04
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = """
             doif $targetring.movs ne 0
         """
@@ -176,7 +177,7 @@ class TestExtendedCAOS(unittest.TestCase):
             doif va02 ne 0
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
         input = """
             dbg: outv $targetring.movs
             dbg: outs $targetring.gall
@@ -200,7 +201,7 @@ class TestExtendedCAOS(unittest.TestCase):
             seta va99 va04
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
+
     def test_object_variables(self):
         input = """
             agent_variable $bioenergy ov63
@@ -215,6 +216,7 @@ class TestExtendedCAOS(unittest.TestCase):
             subv avar from 63 3
         """
         self.assertEqual(desired_output, extendedcaos_to_caos(input))
-    
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     unittest.main()

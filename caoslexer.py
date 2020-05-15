@@ -1,16 +1,21 @@
 import string
 
+
 def peek(s, index):
     if index < len(s):
         return s[index]
     return None
 
+
 class TokenType:
     __slots__ = ["name"]
+
     def __init__(self, name):
         self.name = name
+
     def __repr__(self):
         return self.name
+
 
 TOK_COMMENT = TokenType("TOK_COMMENT")
 TOK_INTEGER = TokenType("TOK_INTEGER")
@@ -21,9 +26,10 @@ TOK_WORD = TokenType("TOK_WORD")
 TOK_DOT = TokenType("TOK_DOT")
 TOK_EOI = TokenType("TOK_EOI")
 
+
 def lexcaos(s):
     p = 0
-    
+
     while True:
         basep = p
         if p >= len(s):
@@ -46,7 +52,9 @@ def lexcaos(s):
             p += 1
             yield (TOK_DOT, ".")
         elif s[p] in string.ascii_letters + "_":
-            while peek(s, p) and peek(s, p) in string.ascii_letters + string.digits + ":_":
+            while (
+                peek(s, p) and peek(s, p) in string.ascii_letters + string.digits + ":_"
+            ):
                 p += 1
             yield (TOK_WORD, s[basep:p])
         elif s[p] == "$":
@@ -55,8 +63,14 @@ def lexcaos(s):
             if peek(s, p) is None:
                 raise Exception("While parsing dollar var, got unexpected EOI")
             if peek(s, p) not in string.ascii_letters + string.digits + "*:_":
-                raise Exception("Expected variable name after '$', got '%s' (%02x)" % (peek(s, p), ord(peek(s, p))))
-            while peek(s, p) and peek(s, p) in string.ascii_letters + string.digits + "*:_":
+                raise Exception(
+                    "Expected variable name after '$', got '%s' (%02x)"
+                    % (peek(s, p), ord(peek(s, p)))
+                )
+            while (
+                peek(s, p)
+                and peek(s, p) in string.ascii_letters + string.digits + "*:_"
+            ):
                 p += 1
             yield (TOK_WORD, s[basep:p])
         elif s[p] == "-":
@@ -64,7 +78,10 @@ def lexcaos(s):
             if peek(s, p) is None:
                 raise Exception("While parsing negative number, got unexpected EOI")
             if peek(s, p) not in string.digits:
-                raise Exception("Expected digit after '-', got '%s' (%02x)" % (peek(s, p), ord(peek(s, p))))
+                raise Exception(
+                    "Expected digit after '-', got '%s' (%02x)"
+                    % (peek(s, p), ord(peek(s, p)))
+                )
             while peek(s, p) and peek(s, p) in string.digits:
                 p += 1
             yield (TOK_INTEGER, int(s[basep:p]))
@@ -72,12 +89,12 @@ def lexcaos(s):
             while peek(s, p) and peek(s, p) in string.digits:
                 p += 1
             yield (TOK_INTEGER, int(s[basep:p]))
-        elif s[p] == "\"":
+        elif s[p] == '"':
             p += 1
             while True:
                 if p >= len(s):
                     raise Exception("While parsing string, got unexpected EOI")
-                if s[p] == "\"":
+                if s[p] == '"':
                     p += 1
                     yield (TOK_STRING, s[basep:p])
                     break
@@ -85,13 +102,13 @@ def lexcaos(s):
                     p += 2
                 else:
                     p += 1
-        elif s[p] == "<" and peek(s, p+1) == ">":
+        elif s[p] == "<" and peek(s, p + 1) == ">":
             p += 2
             yield (TOK_WORD, "<>")
-        elif s[p] == ">" and peek(s, p+1) == "=":
+        elif s[p] == ">" and peek(s, p + 1) == "=":
             p += 2
             yield (TOK_WORD, ">=")
-        elif s[p] == "<" and peek(s, + 1) == "=":
+        elif s[p] == "<" and peek(s, +1) == "=":
             p += 2
             yield (TOK_WORD, "<=")
         elif s[p] == "=":

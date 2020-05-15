@@ -231,6 +231,27 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_explicit_targ_other_commands(self):
+        input = """
+            $targetring.tick tick
+            dbg: outv $targetring.tmvt posx posy
+        """
+        desired_output = """
+            setv va00 tick
+            seta va01 targ
+            targ va02
+            tick va00
+            targ va01
+            setv va03 posx
+            setv va04 posy
+            seta va01 targ
+            targ va02
+            setv va05 tmvt va03 va04
+            targ va01
+            dbg: outv va05
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
     def test_object_variables(self):
         input = """
             agent_variable $bioenergy ov63

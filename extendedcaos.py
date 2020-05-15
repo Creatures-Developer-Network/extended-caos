@@ -177,31 +177,29 @@ def toplevel_explicit_targ(tokens):
     return tokens
 
 
-def explicit_targs_visitor(node, tokens, statement_start):
-    if node.get("type", "") in ("Command", "Condition"):
-        insertions = []
-        for a in node["args"]:
-            insertions += explicit_targs_visitor(a, tokens, statement_start)
-        return insertions
-    elif node.get("type", "") == "DotCommand":
-        insertions = []
-        for a in node["args"]:
-            insertions += explicit_targs_visitor(a, tokens, statement_start)
-
-        if node["commandret"] in ("integer", "float"):
-            set_command = "setv"
-        elif node["commandret"] in ("string",):
-            set_command = "sets"
-        elif node["commandret"] in ("agent",):
-            set_command = "seta"
-        else:
-            # TODO: if it's 'variable'.. look at what the parent is expecting?
-            raise Exception(
-                "Don't know how to save result type '{}' of  {}.{}".format(
-                    node["commandret"], node["targ"], node["command"]
-                )
+def get_setx_for_command(node):
+    if node["commandret"] in ("integer", "float"):
+        return "setv"
+    elif node["commandret"] in ("string",):
+        return "sets"
+    elif node["commandret"] in ("agent",):
+        return "seta"
+    else:
+        # TODO: if it's 'variable'.. look at what the parent is expecting?
+        raise Exception(
+            "Don't know how to save result type '{}' of  {}.{}".format(
+                node["commandret"], node["targ"], node["command"]
             )
+        )
 
+
+def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
+    if node.get("type", "") == "DotCommand":
+        insertions = []
+        for a in node["args"]:
+            insertions += explicit_targs_visitor(a, tokens, statement_start, True)
+
+        set_command = get_setx_for_command(node)
         indent = get_indentation_at(tokens, statement_start)
         value_variable = "$__{}_{}__t{}".format(
             node["targ"].lstrip("$"), node["command"], node["start_token"]
@@ -245,6 +243,36 @@ def explicit_targs_visitor(node, tokens, statement_start):
             tokens[i] = (TOK_WHITESPACE, "")
 
         return insertions
+    elif node.get("type", "") in ("Command", "Condition"):
+        insertions = []
+        for a in node["args"]:
+            insertions += explicit_targs_visitor(
+                a, tokens, statement_start, in_dotcommand
+            )
+
+        if in_dotcommand:
+            set_command = get_setx_for_command(node)
+            indent = get_indentation_at(tokens, statement_start)
+            value_variable = "$__targ_{}__t{}".format(node["name"], node["start_token"])
+            insertions.append(
+                (
+                    statement_start,
+                    [
+                        (TOK_WORD, set_command),
+                        (TOK_WHITESPACE, " "),
+                        (TOK_WORD, value_variable),
+                        (TOK_WHITESPACE, " "),
+                    ]
+                    + tokens[node["start_token"] : node["end_token"] + 1]
+                    + [(TOK_NEWLINE, "\n"), (TOK_WHITESPACE, indent),],
+                )
+            )
+
+            tokens[node["start_token"]] = (TOK_WORD, value_variable)
+            for i in range(node["start_token"] + 1, node["end_token"] + 1):
+                tokens[i] = (TOK_WHITESPACE, "")
+
+        return insertions
     else:
         return []
 
@@ -284,7 +312,9 @@ def explicit_targs(tokens):
             insertion_point = matching_doif["start_token"]
 
         for a in toplevel["args"]:
-            insertions += explicit_targs_visitor(a, tokens, insertion_point)
+            insertions += explicit_targs_visitor(
+                a, tokens, insertion_point, toplevel["type"] == "DotCommand"
+            )
 
         if toplevel["type"] == "DotCommand":
             saved_targ_variable = object()

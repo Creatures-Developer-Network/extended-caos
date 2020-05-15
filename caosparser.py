@@ -241,6 +241,7 @@ def parse_command(state, is_toplevel):
             "type": "Command",
             "name": (namespace + " " if namespace else "") + command,
             "commandtype": ("statement" if is_toplevel else "expression"),
+            "commandret": commandinfos[0]["type"],
             "args": args,
             "start_token": startp,
             "end_token": end_token,

@@ -1,4 +1,5 @@
 import string
+import functools
 
 
 def peek(s, index):
@@ -27,6 +28,25 @@ TOK_DOT = TokenType("TOK_DOT")
 TOK_EOI = TokenType("TOK_EOI")
 
 
+def tokens_to_string(tokens):
+    out = ""
+    for t in tokens:
+        out += str(t[1])
+    return out
+
+
+def listify(fn):
+    def listify_return(fn):
+        @functools.wraps(fn)
+        def listify_helper(*args, **kw):
+            return list(fn(*args, **kw))
+
+        return listify_helper
+
+    return listify_return(fn)
+
+
+@listify
 def lexcaos(s):
     p = 0
 

@@ -5,10 +5,14 @@ from caoslexer import *
 
 
 class ParserState:
-    __slots__ = ["p", "tokens"]
+    __slots__ = ["p", "tokens", "commands", "command_namespaces"]
 
-    def __init__(self, tokens):
+    def __init__(self, tokens, commands):
         self.tokens = tokens
+        self.commands = commands
+        self.command_namespaces = {
+            _.get("namespace") for _ in commands.values() if _.get("namespace")
+        }
         self.p = 0
 
     def peekmatch(self, newp, toktypes):
@@ -16,10 +20,6 @@ class ParserState:
             toktypes = (toktypes,)
         if self.tokens[newp][0] not in toktypes:
             raise Exception("Expected %r, got %s\n" % (toktypes, self.tokens[newp][0]))
-
-
-def caosliteral(value, token):
-    return {"type": "Literal", "value": value, "token": token}
 
 
 def caosvariable(value, token):
@@ -162,7 +162,7 @@ def parse_command(state, is_toplevel):
         if is_toplevel and state.tokens[state.p][1].lower() in ("object_variable",):
             return parse_directive(state)
 
-        if state.tokens[state.p][1].lower() in COMMAND_NAMESPACES:
+        if state.tokens[state.p][1].lower() in state.command_namespaces:
             namespace = state.tokens[state.p][1].lower()
             state.p += 1
             eat_whitespace(state)
@@ -193,7 +193,7 @@ def parse_command(state, is_toplevel):
 
     commandinfos = [
         _
-        for _ in COMMAND_INFO_C3.values()
+        for _ in state.commands.values()
         if _.get("namespace", "").lower() == namespace
         and _.get("match", "").lower() == commandnormalized
         and (
@@ -264,18 +264,20 @@ def parse_value(state):
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
-        return caosliteral(value, startp)
+        return {"type": "LiteralInteger", "value": value, "token": startp}
     elif state.tokens[state.p][0] == TOK_STRING:
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
-        return caosliteral(value, startp)
+        return {"type": "LiteralString", "value": value, "token": startp}
     else:
         raise Exception("Unimplemented token type %s" % state.tokens[state.p][0])
 
 
-def parse(tokens):
-    state = ParserState(tokens)
+def parse(tokens, extra_command_info={}):
+    command_info = dict(COMMAND_INFO["variants"]["c3"])
+    command_info.update(extra_command_info)
+    state = ParserState(tokens, command_info)
     fst = []
     while True:
         maybe_eat_whitespace(state)

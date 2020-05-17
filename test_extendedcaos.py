@@ -1,4 +1,5 @@
-from extendedcaos import extendedcaos_to_caos
+from extendedcaos import *
+from caoslexer import *
 import unittest
 
 
@@ -294,6 +295,60 @@ class TestExtendedCAOS(unittest.TestCase):
             subv ov63 1
             subv mv63 2
             subv avar from 63 3
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+    def test_get_indentation_at(self):
+        self.assertEqual(get_indentation_at(lexcaos("  "), 0), "  ")
+        self.assertEqual(get_indentation_at(lexcaos("  bang"), 1), "  ")
+        self.assertEqual(get_indentation_at(lexcaos("  \n    bang"), 2,), "    ")
+        self.assertEqual(get_indentation_at(lexcaos("  \n    bang"), 3), "    ")
+        self.assertEqual(
+            get_indentation_at(
+                [
+                    (TOK_WHITESPACE, ""),
+                    (TOK_WHITESPACE, "  "),
+                    (TOK_WHITESPACE, "  "),
+                    (TOK_WORD, "bang"),
+                    (TOK_EOI, None),
+                ],
+                3,
+            ),
+            "    ",
+        )
+
+    def test_strip_indent(self):
+        self.assertMultiLineEqual(
+            tokens_to_string(strip_indent(lexcaos("  bang\n    bang\nbang"), "  ")),
+            "bang\n  bang\nbang",
+        )
+
+    def test_add_indent(self):
+        self.assertMultiLineEqual(
+            tokens_to_string(add_indent(lexcaos("bang\n  bang"), "  ")),
+            "  bang\n    bang",
+        )
+
+    def test_macros_toplevel(self):
+        input = """
+        macro CreateMyAgent sprite_name
+            sets $sprite_name lowa $sprite_name
+            new: simp 1 2 1001 $sprite_name 13 4 2000
+        endmacro
+        sets $sprite_name "MY SPRITE"
+        CreateMyAgent $sprite_name
+        CreateMyAgent "my sprite"
+        dbg: outs $sprite_name
+        """
+        desired_output = """
+        sets va00 "MY SPRITE"
+        doif type va00 = 0 or type va00 = 1 setv va01 va00 elif type va00 = 2 sets va01 va00 else seta va01 va00 endi
+        sets va01 lowa va01
+        new: simp 1 2 1001 va01 13 4 2000
+        sets va01 "my sprite"
+        sets va01 lowa va01
+        new: simp 1 2 1001 va01 13 4 2000
+        dbg: outs va00
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 

@@ -115,17 +115,17 @@ def namedvariables_to_vaxx(tokens):
 
 def get_indentation_at(tokens, i):
     assert tokens[i][0] != TOK_NEWLINE
-    assert tokens[i][0] != TOK_WHITESPACE
 
     while i >= 0:
         if tokens[i][0] == TOK_NEWLINE:
             break
         i -= 1
 
-    if tokens[i + 1][0] == TOK_WHITESPACE:
-        return tokens[i + 1][1]
-    else:
-        return ""
+    indentation = ""
+    while tokens[i + 1][0] == TOK_WHITESPACE:
+        indentation += tokens[i + 1][1]
+        i += 1
+    return indentation
 
 
 def toplevel_explicit_targ(tokens):
@@ -178,6 +178,12 @@ def toplevel_explicit_targ(tokens):
 
 
 def get_setx_for_command(node):
+    if node["type"] == "LiteralString":
+        return "sets"
+    if node["type"] == "LiteralInteger":
+        return "setv"
+    if node["type"] not in ("Command", "DotCommand"):
+        raise Exception(node)
     if node["commandret"] in ("integer", "float"):
         return "setv"
     elif node["commandret"] in ("string",):
@@ -356,19 +362,6 @@ def explicit_targs(tokens):
     return tokens
 
 
-def remove_dummies(tokens):
-    # TODO: this is necessary because we add dummy TOK_WHITESPACE tokens
-    # instead of deleting.
-    # It would be nice to have a separate class of dummy tokens that we
-    # could automatically skip.. this is easiest for now though
-    newtokens = []
-    for t in tokens:
-        if t[0] == TOK_WHITESPACE and t[1] == "":
-            continue
-        newtokens.append(t)
-    return newtokens
-
-
 def remove_extraneous_targ_saving(tokens):
     tokens = tokens[:]
     for i in range(len(tokens)):
@@ -425,7 +418,6 @@ def remove_double_targ(tokens):
         for j in range(startdelp, enddelp + 1):
             tokens[j] = (TOK_WHITESPACE, "")
 
-    tokes = remove_dummies(tokens)
     parsetree = parse(tokens)
 
     for i, toplevel in enumerate(parsetree):
@@ -569,22 +561,229 @@ def objectvariables_to_ovxx(tokens):
     return tokens
 
 
+def strip_indent(tokens, indent):
+    tokens = tokens[:]
+    i = 0
+
+    while True:
+        whitespace = ""
+        startp = i
+        while tokens[i][0] == TOK_WHITESPACE:
+            whitespace += tokens[i][1]
+            i += 1
+        endp = i - 1
+
+        if tokens[startp][0] == TOK_WHITESPACE:
+            tokens[startp] = (TOK_WHITESPACE, whitespace[len(indent) :])
+            for j in range(startp + 1, endp + 1):
+                tokens[j] = (TOK_WHITESPACE, "")
+        else:
+            # handle non-indented statements
+            pass
+
+        while tokens[i][0] not in (TOK_EOI, TOK_NEWLINE):
+            i += 1
+        if tokens[i][0] == TOK_EOI:
+            break
+        i += 1
+
+    return tokens
+
+
+def add_indent(tokens, indent):
+    newtokens = [(TOK_WHITESPACE, indent)]
+
+    # TODO: add to existing whitespace tokens, if they exist
+    for t in tokens:
+        newtokens.append(t)
+        if t[0] == TOK_NEWLINE:
+            newtokens.append((TOK_WHITESPACE, indent))
+
+    return newtokens
+
+
+def expand_macros(tokens):
+    tokens = tokens[:]
+
+    # collect macros
+    macros = []
+    i = 0
+    while i < len(tokens):
+        if not (tokens[i][0] == TOK_WORD and tokens[i][1] == "macro"):
+            i += 1
+            continue
+        startp = i
+        i += 1
+
+        if tokens[i][0] != TOK_WHITESPACE:
+            raise Exception("Expected whitespace after 'macro', got %s %s" % tokens[i])
+        while tokens[i][0] == TOK_WHITESPACE:
+            i += 1
+
+        if tokens[i][0] != TOK_WORD:
+            raise Exception("Expected macro name got %s %s" % tokens[i])
+        macro_name = tokens[i][1]
+        i += 1
+
+        argnames = []
+
+        while True:
+            if tokens[i][0] in (TOK_NEWLINE, TOK_COMMENT):
+                i += 1
+                break
+            if tokens[i][0] != TOK_WHITESPACE:
+                raise Exception(
+                    "Expected whitespace, newline, or comment after macro arguments, got %s %s"
+                    % tokens[i]
+                )
+            while tokens[i][0] == TOK_WHITESPACE:
+                i += 1
+            if tokens[i][0] in (TOK_NEWLINE, TOK_COMMENT):
+                i += 1
+                break
+            if tokens[i][0] != TOK_WORD:
+                raise Exception("Expected argument name, got %s %s" % tokens[i])
+            argnames.append(tokens[i][1])
+            i += 1
+
+        bodypstart = i
+
+        while True:
+            if tokens[i][0] == TOK_EOI:
+                raise Exception("Got EOI while parsing macro")
+            if tokens[i][0] == TOK_WORD and tokens[i][1] == "endmacro":
+                break
+            i += 1
+
+        bodypend = i - 1
+        while tokens[bodypend][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+            bodypend -= 1
+
+        while tokens[startp - 1][0] == TOK_WHITESPACE:
+            startp -= 1
+
+        endp = i
+        while tokens[endp + 1][0] == TOK_WHITESPACE:
+            endp += 1
+        if tokens[endp + 1][0] == TOK_NEWLINE:
+            endp += 1
+
+        macros.append(
+            (macro_name, argnames, tokens[bodypstart : bodypend + 1] + [(TOK_EOI, "")])
+        )
+
+        for j in range(startp, endp + 1):
+            tokens[j] = (TOK_WHITESPACE, "")
+
+    # fixup macros
+    for i in range(len(macros)):
+        (name, argnames, body) = macros[i]
+        newbody = body[:]
+        # TODO: better way to make sure these don't conflict with user variables
+        newargnames = ["$__macro_{}_{}".format(name, a) for a in argnames]
+        argnames_to_newargnames = {"$" + a: n for (a, n) in zip(argnames, newargnames)}
+
+        newbody = strip_indent(newbody, get_indentation_at(body, 0))
+
+        for j in range(len(newbody)):
+            if newbody[j][0] == TOK_WORD and newbody[j][1] in argnames_to_newargnames:
+                newbody[j] = (TOK_WORD, argnames_to_newargnames[newbody[j][1]])
+        macros[i] = (name, newargnames, newbody)
+
+    macros_as_commands = {
+        "macro_{}".format(name): {
+            "arguments": [
+                {"name": argname, "type": "anything"} for argname in argnames
+            ],
+            "name": name,
+            "match": name,
+            "type": "command",
+        }
+        for (name, argnames, body) in macros
+    }
+    macros_by_name = {
+        name.lower(): (argnames, body) for (name, argnames, body) in macros
+    }
+
+    # parse and do expansions
+    parsetree = parse(tokens, macros_as_commands)
+    insertions = []
+    for toplevel in parsetree:
+        if toplevel.get("type") != "Command":
+            continue
+        if toplevel["name"].lower() not in macros_by_name:
+            continue
+
+        insertion_point = toplevel["start_token"]
+        argvars = []
+        argnames = macros_by_name[toplevel["name"].lower()][0]
+        for i, a in enumerate(toplevel["args"]):
+            if "start_token" not in a:
+                a["start_token"] = a["token"]
+            if "end_token" not in a:
+                a["end_token"] = a["token"]
+            argvar = argnames[i]
+
+            if a["type"] == "Variable":
+                insertions.append(
+                    (
+                        insertion_point,
+                        lexcaos(
+                            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi\n".format(
+                                value=a["value"], var=argvar
+                            )
+                        ),
+                    )
+                )
+            else:
+                insertions.append(
+                    (
+                        insertion_point,
+                        [
+                            (TOK_WORD, get_setx_for_command(a)),
+                            (TOK_WHITESPACE, " "),
+                            (TOK_WORD, argvar),
+                            (TOK_WHITESPACE, " "),
+                        ]
+                        + tokens[a["start_token"] : a["end_token"] + 1]
+                        + [(TOK_NEWLINE, "\n")],  # TODO: correct newline
+                    )
+                )
+            for j in range(a["start_token"], a["end_token"] + 1):
+                tokens[j] = (TOK_WHITESPACE, "")
+        for j in range(toplevel["start_token"], toplevel["end_token"] + 1):
+            tokens[j] = (TOK_WHITESPACE, "")
+
+        indent = get_indentation_at(tokens, insertion_point)
+        insertions.append(
+            (
+                insertion_point,
+                add_indent(macros_by_name[toplevel["name"].lower()][1], indent),
+            )
+        )
+
+    for insertion_point, toks in reversed(insertions):
+        for t in reversed(toks):
+            tokens.insert(insertion_point, t)
+
+    return tokens
+
+
 def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))
     tokens = move_comments_to_own_line(tokens)
-    tokens = remove_dummies(tokens)
+    # tokens = remove_dummies(tokens)
     tokens = objectvariables_to_ovxx(tokens)
-    tokens = remove_dummies(tokens)
+    # tokens = remove_dummies(tokens)
+    tokens = expand_macros(tokens)
+    # tokens = remove_dummies(tokens)
     tokens = explicit_targs(tokens)
-    tokens = remove_dummies(tokens)
+    # tokens = remove_dummies(tokens)
     tokens = namedvariables_to_vaxx(tokens)
-    tokens = remove_dummies(tokens)
+    # tokens = remove_dummies(tokens)
     tokens = remove_extraneous_targ_saving(tokens)
-    tokens = remove_dummies(tokens)
+    # tokens = remove_dummies(tokens)
     tokens = remove_double_targ(tokens)
-    tokens = remove_dummies(tokens)
+    # tokens = remove_dummies(tokens)
 
-    out = ""
-    for t in tokens:
-        out += str(t[1])
-    return out
+    return tokens_to_string(tokens)

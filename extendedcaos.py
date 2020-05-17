@@ -735,6 +735,21 @@ def expand_macros(tokens):
                         ),
                     )
                 )
+            elif a["type"] == "Command" and a["commandret"] == "variable":
+                # e.g. FROM in Docking Station, which can be an agent or a string
+                insertions.append(
+                    (
+                        insertion_point,
+                        lexcaos(
+                            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi\n".format(
+                                value=tokens_to_string(
+                                    tokens[a["start_token"] : a["end_token"] + 1]
+                                ),
+                                var=argvar,
+                            )
+                        ),
+                    )
+                )
             else:
                 insertions.append(
                     (

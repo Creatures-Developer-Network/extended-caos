@@ -10,11 +10,11 @@
 *# Web URL = "naturingnurturing.blogspot.com"
 *# Web Label = "Naturing :: Nurturing"
 
+agent_variable $unique_id ov00
 agent_variable $unique_pose ov96
 agent_variable $unique_tintr ov97
 agent_variable $unique_tintg ov98
 agent_variable $unique_tintb ov99
-agent_variable $unique_id ov00
 
 constant :elevine_classifier 3 1 21051
 constant :elevine_clac_script 1000

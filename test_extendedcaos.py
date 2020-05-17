@@ -291,7 +291,6 @@ class TestExtendedCAOS(unittest.TestCase):
             subv from.$bioenergy 3
         """
         desired_output = """
-            
             subv ov63 1
             subv mv63 2
             subv avar from 63 3
@@ -367,7 +366,7 @@ class TestExtendedCAOS(unittest.TestCase):
     def test_constants(self):
         input = """
         constant :my_classifier 3 21 4000
-        constant :my_clac_script_number 1000  
+        constant :my_clac_script_number 1000
         new: simp :my_classifier "sprite_name" 1 1 1000
         dbg: outv :my_clac_script_number
         """

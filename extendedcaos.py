@@ -392,6 +392,34 @@ def remove_extraneous_targ_saving(tokens):
     return tokens
 
 
+def whiteout_node_from_tokens(node, tokens):
+    startp = node.get("start_token", node.get("token"))
+    endp = node.get("end_token", node.get("token"))
+
+    newstartp = startp
+    while newstartp > 0 and tokens[newstartp - 1][0] == TOK_WHITESPACE:
+        newstartp -= 1
+
+    # if newstartp == 0 or tokens[newstartp][0] == TOK_NEWLINE:
+    #     startp = newstartp
+
+    newendp = endp
+    while tokens[newendp + 1][0] == TOK_WHITESPACE:
+        newendp += 1
+    if tokens[newendp + 1][0] == TOK_NEWLINE:
+        newendp += 1
+
+    # if it's on its own line, get rid of the entire line
+    if (newstartp == 0 or tokens[newstartp - 1][0] == TOK_NEWLINE) and (
+        tokens[newendp][0] in (TOK_NEWLINE, TOK_EOI)
+    ):
+        startp = newstartp
+        endp = newendp
+
+    for j in range(startp, endp + 1):
+        tokens[j] = (TOK_WHITESPACE, "")
+
+
 def remove_double_targ(tokens):
     tokens = tokens[:]
     for i in range(len(tokens)):
@@ -437,118 +465,55 @@ def remove_double_targ(tokens):
         ):
             continue
 
-        startp = second_targ["start_token"]
-        endp = second_targ["end_token"]
-
-        while startp > 0 and tokens[startp - 1][0] == TOK_WHITESPACE:
-            startp -= 1
-
-        while tokens[endp + 1][0] == TOK_WHITESPACE:
-            endp += 1
-        if tokens[endp + 1][0] == TOK_NEWLINE:
-            endp += 1
-
-        for j in range(startp, endp + 1):
-            tokens[j] = (TOK_WHITESPACE, "")
+        whiteout_node_from_tokens(second_targ, tokens)
 
     return tokens
 
 
-def objectvariables_to_ovxx(tokens):
+def expand_agentvariables(tokens):
     tokens = tokens[:]
 
     # build object variable mapping
     var_mapping = {}
-    i = 0
-    while i < len(tokens):
-        if not (tokens[i][0] == TOK_WORD and tokens[i][1] == "agent_variable"):
-            i += 1
+
+    parsetree = parse(tokens)
+    for toplevel in parsetree:
+        if not toplevel["type"] == "AgentVariableDefinition":
             continue
-        startp = i
-        i += 1
+        var_mapping[toplevel["name"]] = toplevel["value"]
 
-        if tokens[i][0] not in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
-            raise Exception(
-                "Expected whitespace after 'agent_variable', got %s %s" % tokens[i]
-            )
-        while tokens[i][0] in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
-            i += 1
-
-        if not (tokens[i][0] == TOK_WORD and tokens[i][1][0] == "$"):
-            raise Exception(
-                "Expected variable name after 'agent_variable', got %s %s" % tokens[i]
-            )
-        variable_name = tokens[i][1]
-        i += 1
-
-        if tokens[i][0] not in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
-            raise Exception(
-                "Expected whitespace after '%s', got %s %s"
-                % (variable_name, tokens[i][0], tokens[i][1])
-            )
-        while tokens[i][0] in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
-            i += 1
-
-        if not (tokens[i][0] == TOK_WORD and re.match(r"(?i)^ov\d\d$", tokens[i][1])):
-            raise Exception(
-                "Expected ovXX after '%s', got %s %s"
-                % (variable_name, tokens[i][0], tokens[i][1])
-            )
-        variable_definition = tokens[i][1]
-        i += 1
-
-        while tokens[i][0] == TOK_WHITESPACE:
-            i += 1
-        if tokens[i][0] not in (TOK_NEWLINE, TOK_EOI):
-            raise Exception(
-                "Expected newline after agent_variable directive, got %s %s" % tokens[i]
-            )
-        endp = i
-        i += 1
-
-        var_mapping[variable_name] = variable_definition
-
-        for j in range(startp, endp):
-            tokens[j] = (TOK_WHITESPACE, "")
+        whiteout_node_from_tokens(toplevel, tokens)
 
     # do replacements
     insertions = []
-    i = 0
-    while i < len(tokens):
-        if not (
-            tokens[i][0] == TOK_WORD
-            and tokens[i + 1][0] == TOK_DOT
-            and tokens[i + 2][0] == TOK_WORD
-            and tokens[i + 2][1][0] == "$"
-        ):
-            i += 1
-            continue
-        variable_name = tokens[i + 2][1]
-        if tokens[i][1].lower() == "targ":
-            insertions.append(
-                (i, [(TOK_WORD, "ov" + var_mapping[variable_name][2:4]),])
-            )
-        elif tokens[i][1].lower() == "ownr":
-            insertions.append(
-                (i, [(TOK_WORD, "mv" + var_mapping[variable_name][2:4]),])
-            )
-        else:
-            insertions.append(
-                (
-                    i,
-                    [
-                        (TOK_WORD, "avar"),
-                        (TOK_WHITESPACE, " "),
-                        tokens[i],
-                        (TOK_WHITESPACE, " "),
-                        (TOK_INTEGER, int(var_mapping[variable_name][2:4])),
-                    ],
+
+    def visit(node):
+        if node["type"] == "DotVariable":
+            insertion_point = node["start_token"]
+            variable_index = var_mapping[node["name"]][2:4]
+            if node["targ"] == "targ":
+                insertions.append(
+                    (insertion_point, [(TOK_WORD, "ov" + variable_index),],)
                 )
-            )
-        tokens[i] = (TOK_WHITESPACE, "")
-        tokens[i + 1] = (TOK_WHITESPACE, "")
-        tokens[i + 2] = (TOK_WHITESPACE, "")
-        i += 3
+            elif node["targ"] == "ownr":
+                insertions.append(
+                    (insertion_point, [(TOK_WORD, "mv" + variable_index),],)
+                )
+            else:
+                insertions.append(
+                    (
+                        insertion_point,
+                        # TODO: make it so you can easily use lexcaos to generate snippets. either get rid of TOK_EOI, or add logic to insertions to ignore it/halt
+                        lexcaos("avar {} {}".format(node["targ"], variable_index))[:-1],
+                    )
+                )
+            whiteout_node_from_tokens(node, tokens)
+        elif node.get("args"):
+            for a in node["args"]:
+                visit(a)
+
+    for toplevel in parsetree:
+        visit(toplevel)
 
     for insertion_point, toks in reversed(insertions):
         for t in reversed(toks):
@@ -790,16 +755,7 @@ def replace_constants(tokens):
 
     for toplevel in parsetree:
         if toplevel["type"] == "ConstantDefinition":
-            startp = toplevel["start_token"]
-            endp = toplevel["end_token"]
-            while startp > 0 and tokens[startp - 1][0] == TOK_WHITESPACE:
-                startp -= 1
-            while tokens[endp + 1][0] == TOK_WHITESPACE:
-                endp += 1
-            if tokens[endp + 1][0] == TOK_NEWLINE:
-                endp += 1
-            for j in range(startp, endp + 1):
-                tokens[j] = (TOK_WHITESPACE, "")
+            whiteout_node_from_tokens(toplevel, tokens)
             constant_definitions[toplevel["name"]] = toplevel["values"]
 
     for i, t in enumerate(tokens):
@@ -824,9 +780,9 @@ def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))
     tokens = move_comments_to_own_line(tokens)
     # tokens = remove_dummies(tokens)
-    tokens = objectvariables_to_ovxx(tokens)
-    # tokens = remove_dummies(tokens)
     tokens = expand_macros(tokens)
+    # tokens = remove_dummies(tokens)
+    tokens = expand_agentvariables(tokens)
     # tokens = remove_dummies(tokens)
     tokens = explicit_targs(tokens)
     # tokens = remove_dummies(tokens)

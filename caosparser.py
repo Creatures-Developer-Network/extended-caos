@@ -29,10 +29,6 @@ class ParserState:
             raise Exception("Expected %r, got %s\n" % (toktypes, self.tokens[newp][0]))
 
 
-def caosvariable(value, token):
-    return {"type": "Variable", "value": value, "token": token}
-
-
 def caoscondition(args, start_token):
     end_token = args[-1].get("end_token") or args[-1].get("token")
     return {
@@ -135,13 +131,7 @@ def parse_command(state, is_toplevel):
     dotcommand = False
 
     if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1][0] == "$":
-        if state.tokens[state.p + 1][0] != TOK_DOT:
-            value = state.tokens[state.p][1]
-            state.p += 1
-            state.peekmatch(
-                state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE)
-            )
-            return caosvariable(value, startp)
+        assert state.tokens[state.p + 1][0] == TOK_DOT
         dotcommand = True
         namespace = ""
         targ = state.tokens[state.p][1].lower()
@@ -160,6 +150,16 @@ def parse_command(state, is_toplevel):
             # TODO: check it's a valid command
             state.p += 2
             command = state.tokens[state.p][1].lower()
+
+            if command[0] == "$":
+                state.p += 1
+                return {
+                    "type": "DotVariable",
+                    "name": command,
+                    "targ": targ,
+                    "start_token": startp,
+                    "end_token": state.p - 1,
+                }
         else:
             namespace = ""
             command = state.tokens[state.p][1].lower()
@@ -295,9 +295,54 @@ def parse_constant_definition(state):
     }
 
 
+def parse_agent_variable(state):
+    assert (
+        state.tokens[state.p][0] == TOK_WORD
+        and state.tokens[state.p][1] == "agent_variable"
+    )
+    startp = state.p
+    state.p += 1
+
+    eat_whitespace(state)
+    if not (
+        state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1][0] == "$"
+    ):
+        raise Exception(
+            "Expected variable name after 'agent_variable', got %r"
+            % (state.tokens[state.p],)
+        )
+    variable_name = state.tokens[state.p][1]
+    state.p += 1
+
+    eat_whitespace(state)
+    if not (
+        state.tokens[state.p][0] == TOK_WORD
+        and re.match(r"(?i)^ov\d\d$", state.tokens[state.p][1])
+    ):
+        raise Exception(
+            "Expected ovXX after agent variable name, got %r" % (state.tokens[state.p],)
+        )
+    definition = state.tokens[state.p][1].lower()
+    endp = state.p
+    state.p += 1
+
+    return {
+        "type": "AgentVariableDefinition",
+        "name": variable_name,
+        "value": definition,
+        "start_token": startp,
+        "end_token": endp,
+    }
+
+
 def parse_toplevel(state):
     if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "constant":
         return parse_constant_definition(state)
+    if (
+        state.tokens[state.p][0] == TOK_WORD
+        and state.tokens[state.p][1] == "agent_variable"
+    ):
+        return parse_agent_variable(state)
     return parse_command(state, True)
 
 
@@ -313,6 +358,16 @@ def parse_value(state):
                 "type": "Constant",
                 "name": state.tokens[state.p - 1][1],
             }
+        elif (
+            state.tokens[state.p][1][0] == "$"
+            and state.tokens[state.p + 1][0] != TOK_DOT
+        ):
+            value = state.tokens[state.p][1]
+            state.p += 1
+            state.peekmatch(
+                state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE)
+            )
+            return {"type": "Variable", "value": value, "token": startp}
         return parse_command(state, False)
     elif state.tokens[state.p][0] == TOK_INTEGER:
         value = state.tokens[state.p][1]

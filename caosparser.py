@@ -5,7 +5,13 @@ from caoslexer import *
 
 
 class ParserState:
-    __slots__ = ["p", "tokens", "commands", "command_namespaces"]
+    __slots__ = [
+        "p",
+        "tokens",
+        "commands",
+        "command_namespaces",
+        "constant_definitions",
+    ]
 
     def __init__(self, tokens, commands):
         self.tokens = tokens
@@ -13,6 +19,7 @@ class ParserState:
         self.command_namespaces = {
             _.get("namespace") for _ in commands.values() if _.get("namespace")
         }
+        self.constant_definitions = {}
         self.p = 0
 
     def peekmatch(self, newp, toktypes):
@@ -42,7 +49,23 @@ def caosconditionkeyword(value):
 
 def maybe_eat_whitespace(state):
     ate_whitespace = False
-    while state.tokens[state.p][0] in (TOK_COMMENT, TOK_WHITESPACE, TOK_NEWLINE):
+    while state.tokens[state.p][0] == TOK_WHITESPACE:
+        ate_whitespace = True
+        state.p += 1
+    return ate_whitespace
+
+
+def maybe_eat_whitespace_or_newline(state):
+    ate_whitespace = False
+    while state.tokens[state.p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
+        ate_whitespace = True
+        state.p += 1
+    return ate_whitespace
+
+
+def maybe_eat_whitespace_or_newline_or_comment(state):
+    ate_whitespace = False
+    while state.tokens[state.p][0] in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
         ate_whitespace = True
         state.p += 1
     return ate_whitespace
@@ -51,7 +74,15 @@ def maybe_eat_whitespace(state):
 def eat_whitespace(state):
     if not maybe_eat_whitespace(state):
         raise Exception(
-            "Expected whitespace or comment, got %s %s"
+            "Expected whitespace, got %s %s"
+            % (state.tokens[state.p][0], state.tokens[state.p][1])
+        )
+
+
+def eat_whitespace_or_newline(state):
+    if not maybe_eat_whitespace_or_newline(state):
+        raise Exception(
+            "Expected whitespace or newline, got %s %s"
             % (state.tokens[state.p][0], state.tokens[state.p][1])
         )
 
@@ -99,48 +130,6 @@ def parse_condition(state):
         return caoscondition([left, caosconditionkeyword(comparison), right], startp)
 
 
-def parse_directive(state):
-    startp = state.p
-    if state.tokens[state.p][0] != TOK_WORD:
-        raise Exception(
-            "Expected directive name, got %s %s"
-            % (state.tokens[state.p][0], state.tokens[state.p][1])
-        )
-
-    directive_name = state.tokens[state.p][1].lower()
-    if directive_name == "object_variable":
-        state.p += 1
-        eat_whitespace(state)
-        if state.tokens[state.p][0] != TOK_WORD or state.tokens[state.p][1][0] != "$":
-            raise Exception(
-                "Expected variable name, got %s %s"
-                % (state.tokens[state.p][0], state.tokens[state.p][1])
-            )
-        args = [state.tokens[state.p][1]]
-        state.p += 1
-        eat_whitespace(state)
-        if state.tokens[state.p][0] != TOK_WORD:
-            raise Exception(
-                "Expected variable command, got %s %s"
-                % (state.tokens[state.p][0], state.tokens[state.p][1])
-            )
-        args.append(state.tokens[state.p][1])
-        state.p += 1
-
-        return {
-            "type": "Directive",
-            "name": "object_variable",
-            "args": args,
-            "start_token": startp,
-            "end_token": state.p - 1,
-        }
-    else:
-        raise Exception(
-            "Expected directive name, got %s %s"
-            % (state.tokens[state.p][0], state.tokens[state.p][1])
-        )
-
-
 def parse_command(state, is_toplevel):
     startp = state.p
     dotcommand = False
@@ -159,9 +148,6 @@ def parse_command(state, is_toplevel):
         state.p += 2
         command = state.tokens[state.p][1].lower()
     elif state.tokens[state.p][0] == TOK_WORD:
-        if is_toplevel and state.tokens[state.p][1].lower() in ("object_variable",):
-            return parse_directive(state)
-
         if state.tokens[state.p][1].lower() in state.command_namespaces:
             namespace = state.tokens[state.p][1].lower()
             state.p += 1
@@ -209,7 +195,9 @@ def parse_command(state, is_toplevel):
     state.p += 1
 
     args = []
-    for _ in commandinfos[0]["arguments"]:
+    num_args_parsed = 0
+    while num_args_parsed < len(commandinfos[0]["arguments"]):
+        _ = commandinfos[0]["arguments"][num_args_parsed]
         eat_whitespace(state)
         if _["type"] == "condition":
             args.append(parse_condition(state))
@@ -222,6 +210,10 @@ def parse_command(state, is_toplevel):
             state.p += 1
         else:
             args.append(parse_value(state))
+        if args[-1]["type"] == "Constant":
+            num_args_parsed += len(state.constant_definitions[args[-1]["name"]])
+        else:
+            num_args_parsed += 1
 
     end_token = state.p - 1
 
@@ -248,8 +240,64 @@ def parse_command(state, is_toplevel):
         }
 
 
+def parse_constant_definition(state):
+    assert (
+        state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "constant"
+    )
+    startp = state.p
+
+    state.p += 1
+    eat_whitespace(state)
+
+    if not (
+        state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1][0] == ":"
+    ):
+        raise Exception(
+            "Expected constant name after 'constant', got %r" % (state.tokens[state.p],)
+        )
+    name = state.tokens[state.p][1]
+    state.p += 1
+
+    values = []
+
+    eat_whitespace(state)
+    if state.tokens[state.p][0] not in (TOK_INTEGER, TOK_STRING):
+        raise Exception(
+            "Expected literal in 'constant' definition, got %r"
+            % (state.tokens[state.p],)
+        )
+    values.append(state.tokens[state.p])
+    state.p += 1
+
+    while True:
+        if state.tokens[state.p][0] in (TOK_NEWLINE, TOK_EOI):
+            break
+        eat_whitespace(state)
+        if state.tokens[state.p][0] in (TOK_NEWLINE, TOK_EOI):
+            break
+        if state.tokens[state.p][0] not in (TOK_INTEGER, TOK_STRING):
+            raise Exception(
+                "Expected literal in 'constant' definition, got %r"
+                % (state.tokens[state.p],)
+            )
+        values.append(state.tokens[state.p])
+        state.p += 1
+
+    endp = state.p - 1
+
+    state.constant_definitions[name] = values
+    return {
+        "type": "ConstantDefinition",
+        "name": name,
+        "values": values,
+        "start_token": startp,
+        "end_token": endp,
+    }
+
+
 def parse_toplevel(state):
-    maybe_eat_whitespace(state)
+    if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "constant":
+        return parse_constant_definition(state)
     return parse_command(state, True)
 
 
@@ -259,6 +307,12 @@ def parse_value(state):
     startp = state.p
 
     if state.tokens[state.p][0] == TOK_WORD:
+        if state.tokens[state.p][1][0] == ":":
+            state.p += 1
+            return {
+                "type": "Constant",
+                "name": state.tokens[state.p - 1][1],
+            }
         return parse_command(state, False)
     elif state.tokens[state.p][0] == TOK_INTEGER:
         value = state.tokens[state.p][1]
@@ -280,7 +334,7 @@ def parse(tokens, extra_command_info={}):
     state = ParserState(tokens, command_info)
     fst = []
     while True:
-        maybe_eat_whitespace(state)
+        maybe_eat_whitespace_or_newline_or_comment(state)
         if state.tokens[state.p][0] == TOK_EOI:
             break
         fst.append(parse_toplevel(state))

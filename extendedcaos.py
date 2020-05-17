@@ -192,11 +192,7 @@ def get_setx_for_command(node):
         return "seta"
     else:
         # TODO: if it's 'variable'.. look at what the parent is expecting?
-        raise Exception(
-            "Don't know how to save result type '{}' of  {}.{}".format(
-                node["commandret"], node["targ"], node["command"]
-            )
-        )
+        raise Exception("Don't know how to save result type of {}".format(node))
 
 
 def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
@@ -784,6 +780,46 @@ def expand_macros(tokens):
     return tokens
 
 
+def replace_constants(tokens):
+    tokens = tokens[:]
+    parsetree = parse(tokens)
+
+    insertions = []
+
+    constant_definitions = {}  # TODO: expose from parse(tokens)
+
+    for toplevel in parsetree:
+        if toplevel["type"] == "ConstantDefinition":
+            startp = toplevel["start_token"]
+            endp = toplevel["end_token"]
+            while startp > 0 and tokens[startp - 1][0] == TOK_WHITESPACE:
+                startp -= 1
+            while tokens[endp + 1][0] == TOK_WHITESPACE:
+                endp += 1
+            if tokens[endp + 1][0] == TOK_NEWLINE:
+                endp += 1
+            for j in range(startp, endp + 1):
+                tokens[j] = (TOK_WHITESPACE, "")
+            constant_definitions[toplevel["name"]] = toplevel["values"]
+
+    for i, t in enumerate(tokens):
+        if not (t[0] == TOK_WORD and t[1][0] == ":"):
+            continue
+        values = []
+        for v in constant_definitions[t[1]]:
+            if values:
+                values.append((TOK_WHITESPACE, " "))
+            values.append(v)
+        insertions.append((i, values))
+        tokens[i] = (TOK_WHITESPACE, "")
+
+    for insertion_point, toks in reversed(insertions):
+        for t in reversed(toks):
+            tokens.insert(insertion_point, t)
+
+    return tokens
+
+
 def extendedcaos_to_caos(s):
     tokens = list(lexcaos(s))
     tokens = move_comments_to_own_line(tokens)
@@ -795,6 +831,8 @@ def extendedcaos_to_caos(s):
     tokens = explicit_targs(tokens)
     # tokens = remove_dummies(tokens)
     tokens = namedvariables_to_vaxx(tokens)
+    # tokens = remove_dummies(tokens)
+    tokens = replace_constants(tokens)
     # tokens = remove_dummies(tokens)
     tokens = remove_extraneous_targ_saving(tokens)
     # tokens = remove_dummies(tokens)

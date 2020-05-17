@@ -16,402 +16,202 @@ agent_variable $unique_tintg ov98
 agent_variable $unique_tintb ov99
 agent_variable $unique_id ov00
 
-*lift teleporting ball things.
-new: comp 3 1 21051 "elevines" 13 4 2000
+constant :elevine_classifier 3 1 21051
+constant :elevine_clac_script 1000
 
-*Inject it where it belongs:
-*Why are you including a C3 inject script when this isn't even C3 compatible?
-*Probably because I am lazy and just want to copypaste my install script....
-doif gnam eq "Docking Station"
-	setv $creatorx game "CreatorX"
-	setv $creatory game "CreatorY"
-	doif $creatorx eq 0 and $creatory eq 0
-		setv $creatorx 6110
-		setv $creatory 9200
-	endi
-	doif tmvt $creatorx $creatory eq 1
-		mvto $creatorx $creatory
+constant :key_shift 16
+constant :key_ctrl 17
+constant :noun_elevator 26
+constant :verb_reset -1
+constant :stimulus_disappoint 0
+constant :stimulus_wait 75
+constant :stimulus_travelled_in_lift 94
+constant :script_activate_1 1
+constant :script_activate_2 2
+constant :script_timer 9
+
+macro CreateElevine parent
+	*lift teleporting ball things.
+	new: comp :elevine_classifier "elevines" 13 4 2000
+
+	*parts-- 1, top button, 2, bottom
+	pat: dull 1 "elevines" 0 6 21 1
+	pat: dull 2 "elevines" 2 12 72 1
+
+	clac :elevine_clac_script
+	bhvr 3 * activate 1 (1) activate 2 (2)
+	tick 30
+	attr 198 * ouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
+	accg 30
+	elas 20
+	fric 100
+	perm 100
+
+	*targ.$unique_tintg and 99 are going to be the random tints, targ.$unique_tintr is the random -pose-
+	doif $parent = null
+		setv targ.$unique_pose rand 0 12
+		setv targ.$unique_tintr rand 50 200
+		setv targ.$unique_tintg rand 50 200
+		setv targ.$unique_tintb rand 50 200
 	else
-		mvsf $creatorx $creatory
+		setv targ.$unique_pose $parent.$unique_pose
+		setv targ.$unique_tintr $parent.$unique_tintr
+		setv targ.$unique_tintg $parent.$unique_tintg
+		setv targ.$unique_tintb $parent.$unique_tintb
 	endi
-elif gnam eq "Creatures 3"
-	doif tmvt 5671 3599 eq 1
-		mvto 5671 3599
-	else
-		mvsf 5671 3599
+	pose targ.$unique_pose
+	tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
+
+	*We'll base your ID number off your tints, just for fun:
+	sets targ.$unique_id vtos targ.$unique_tintr
+	adds targ.$unique_id vtos targ.$unique_tintg
+	adds targ.$unique_id vtos targ.$unique_tintb
+endmacro
+
+macro TeleportCreature $targetring $creature
+	doif from = null
+		stop
 	endi
+	doif from.fmly <> 4
+		stop
+	endi
+	*So $targetring should be the ideal ring to tele to now
+	*assuming there is one.
+	*if there's NOT, stop this whole thing now!
+	doif $targetring eq null
+		*put a bug in it's ear-- stop pushing this!
+		urge writ from :noun_elevator -2 :verb_reset 2
+		stim writ from :stimulus_disappoint 1
+		sndc "buzz"
+		stop
+	endi
+	
+	*if it's being carried (like by the hand), stop
+	doif $targetring.movs ne 0
+		stop
+	endi
+	
+	* make sure the creature's not being carried
+	doif from.movs <> 0
+		stop
+	endi
+
+	*if it's not a VALID PLACE make a sndc
+	doif from.tmvf $targetring.posx $targetring.posb <> 1
+		sndc "buzz"
+		stop
+	endi
+	
+	*Lock it out from creatures for a second!
+	$targetring.tick $targetring.tick
+	$targetring.attr 214
+	
+	
+	from.mvft $targetring.posx $targetring.posb
+	* tell the norn it just travled
+	* and it needs to wait?
+	* tell the norn to STOP now..
+	* and make some dingysound
+	stim writ from :stimulus_travelled_in_lift 1
+	stim writ from :stimulus_wait 1
+	urge writ from :noun_elevator -2 :verb_reset 2
+	sndc "snap"
+	
+	stop
+endmacro
+
+*Create initial elevine, and move it where it belongs:
+CreateElevine null
+doif game "CreatorX" > 0 and game "CreatorY" > 0
+	mvsf game "CreatorX" game "CreatorY"
+else
+	mvsf 6110 9200
 endi
 
-clac 1000
-
-bhvr 3
-*activate 1 (1) activate 2 (2)
-
-tick 30
-
-
-attr 198
-*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
-
-accg 30
-elas 20
-fric 100
-perm 100
-
-*targ.$unique_tintg and 99 are going to be the random tints, targ.$unique_tintr is the random -pose-
-setv targ.$unique_pose rand 0 12
-setv targ.$unique_tintr rand 50 200
-setv targ.$unique_tintg rand 50 200
-setv targ.$unique_tintb rand 50 200
-pose targ.$unique_pose
-tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
-
-*We'll base your ID number off your tints, just for fun:
-sets targ.$unique_id vtos targ.$unique_tintr
-adds targ.$unique_id vtos targ.$unique_tintg
-adds targ.$unique_id vtos targ.$unique_tintb
-
-*parts-- 1, top button, 2, bottom
-pat: dull 1 "elevines" 0 6 21 1
-pat: dull 2 "elevi\nesd\d .. dd" 2 12 72 1
-
-
 *Push -- Want to go up
-scrp 3 1 21051 1
+scrp :elevine_classifier :script_activate_1
 	inst
 	lock
-*first off, is it actually possible to go up?
-
-*check where you are
-*set the little serchagent to null
+	*first off, is it actually possible to go up?
 	seta $targetring null
-*enum through other circles
-	enum 3 1 21051
-
-*only check ones of your code
-		doif ownr.$unique_id eq targ.$unique_id
-
-*see if it's on a higher level-- that is, the y coord is less than mv10
-			doif posy lt ownr.posy
-*herein lies the tricky part-- you want it to be lower than the ring
-*being pushed, but higher than the rest.
-*so NOW check to see if a previous agent has been found
-				doif $targetring = null
-*if not, make it the current favorite
-* so set the ring you just found into $targetring
-* and the y coord into $targetposy
-					seta $targetring targ
-*else, you have to check it against the current $targetposy to
-*make sure it's the highest-lower y coord
-				else
-					doif posy gt $targetring.posy
-						seta $targetring targ
-					endi
-				endi
+	enum :elevine_classifier
+		doif ownr.$unique_id = targ.$unique_id and posy < ownr.posy
+			*herein lies the tricky part-- you want it to be lower than the ring
+			*being pushed, but higher than the rest.
+			doif $targetring = null
+				seta $targetring targ
+			elif posy > $targetring.posy
+				seta $targetring targ
 			endi
 		endi
 	next
-*So $targetring should be the ideal ring to tele to now
-*assuming there is one.
-*if there's NOT, stop this whole thing now!
-	doif $targetring eq null
-
-*make sure there's a FROM creature
-		doif from ne null
-*who pushed you?
-			doif from.fmly = 4
-*put a bug in it's ear-- stop pushing this!
-
-				urge writ from 26 -2 -1 2
-				sndc "buzz"
-*disappointment
-				stim writ from 0 1
-				stop
-			else
-				stop
-			endi
-		else
-			stop
-		endi
-*else there IS a $targetring!
-	else
-*if it's being carried (like by the hand), stop
-		doif $targetring.movs ne 0
-			stop
-		endi
-*now, make sure there's a creature to move
-		doif from ne null
-			doif from.fmly = 4
-*Lock it out from creatures for a second!
-				$targetring.tick tick
-				$targetring.attr 214
-
-*now targ the norn
-*make sure it's not being carried
-				doif from.movs ne 0
-					stop
-				endi
-*Make sure it's a VALID place to move it!
-*and move it!
-				doif from.tmvf $targetring.posx $targetring.posb = 1
-					from.mvft $targetring.posx $targetring.posb
-
-*tell the norn it just travled
-*and it needs to wait?
-*tell the norn to STOP now..
-*and make some dingysound
-					stim writ from 94 1
-					stim writ from 75 1
-					urge writ from 26 -2 -1 2
-					sndc "snap"
-				else
-*if it's not a VALID PLACE make a sndc
-					sndc "buzz"
-					stop
-				endi
-			else
-				stop
-			endi
-
-		endi
-	endi
+	TeleportCreature $targetring from
 endm
 
 *Pull -- Want to go down
-scrp 3 1 21051 2
+scrp :elevine_classifier :script_activate_2
 	inst
-*first off, is it actually possible to go DOWN?
-
-*check where you are
-*set the little serchagent to null
+	lock
+	*first off, is it actually possible to go down?
 	seta $targetring null
-*enum through other circles
-	enum 3 1 21051
-
-*only check ones of your code
-		doif ownr.$unique_id eq targ.$unique_id
-
-*see if it's on a higher level-- that is, the y coord is GREATER than mv10
-			doif posy gt ownr.posy
-*herein lies the tricky part-- you want it to be lower than the ring
-*being pushed, but higher than the rest.
-*so NOW check to see if a previous agent has been found
-				doif $targetring eq null
-*if not, make it the current favorite
-* so set the ring you just found into $targetring
-* and the y coord into $targetposy
-
-					seta $targetring targ
-*else, you have to check it against the current $targetposy to
-*make sure it's the lowest-higher y coord
-				else
-					doif posy lt $targetring.posy
-						seta $targetring targ
-					endi
-				endi
+	enum :elevine_classifier
+		doif ownr.$unique_id = targ.$unique_id and posy > ownr.posy
+			*herein lies the tricky part-- you want it to be higher than the ring
+			*being pushed, but lower than the rest.
+			doif $targetring = null
+				seta $targetring targ
+			elif posy < $targetring.posy
+				seta $targetring targ
 			endi
 		endi
 	next
-*So $targetring should be the ideal ring to tele to now
-*assuming there is one.
-*if there's NOT, stop this whole thing now!
-	doif $targetring eq null
-
-*make sure there's a FROM creature
-		doif from ne null
-*who pushed you?
-			doif from.fmly = 4
-*put a bug in it's ear-- stop pulling this!
-
-*hi
-
-				sndc "buzz"
-
-				urge writ from 26 -2 -1 2
-*disappointment
-				stim writ from 0 1
-				stop
-			else
-				stop
-
-			endi
-		else
-			stop
-		endi
-*else there IS a $targetring!
-	else
-*if it's being carried (like by the hand), stop
-		doif $targetring.movs ne 0
-			sndc "buzz"
-			stop
-		endi
-*now, make sure there's a creature to move
-		doif from ne null
-			doif from.fmly = 4
-*set the coords of $targetring into $targetposx and $targetposb
-*Lock it out from creatures for a second!
-				$targetring.tick $targetring.tick
-				$targetring.attr 214
-
-*now targ the norn
-*make sure it's not being carried
-				doif from.movs ne 0
-					stop
-				endi
-*Make sure it's a VALID place to move it!
-				doif from.tmvf $targetring.posx $targetring.posb = 1
-*and move it!
-					from.mvft $targetposx $targetposb
-*tell the norn it just travled
-					stim writ from 94 1
-*tell the norn to STOP now..
-					urge writ from 26 -2 -1 2
-*wait?
-					stim writ from 75 1
-*and make some dingysound
-					sndc "snap"
-
-
-				else
-*if it's not a VALID PLACE make a sndc
-					sndc "buzz"
-					stop
-				endi
-			else
-				stop
-			endi
-
-		endi
-	endi
+	TeleportCreature $targetring from
 endm
 
-
 *you've been CLICKED or clac'd or something
-scrp 3 1 21051 1000
+scrp :elevine_classifier :elevine_clac_script
 	inst
 *Here is how it works....
 *shift+click creates a copy of the same OV
 *ctrl+click creates a copy of a new OV
 *shift+click kills it.
-	sndc "opn1"
-*shift -- make a copy, save OV, same tint
-	doif keyd 16 eq 1 and keyd 17 eq 0
+	doif keyd :key_shift eq 1 and keyd :key_ctrl eq 0
 		sndc "opn1"
-
-		new: comp 3 1 21051 "elevines" 13 4 2000
-
-*move it to the old one, and make it hop a bit
+		CreateElevine ownr
+		*move it to the old one, and make it hop a bit
 		mvsf ownr.posl ownr.post
 		velo 15 100
-
-		clac 1000
-
-		bhvr 3
-*activate 1 (1) activate 2 (2)
-		tick 30
-
-		attr 198
-*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
-
-		accg 30
-		elas 20
-		fric 100
-		perm 100
-
-
-*targ.$unique_tintr, 96, 98 and 99 are going to be COPIED
-		setv targ.$unique_pose ownr.$unique_pose
-		setv targ.$unique_tintr ownr.$unique_tintr
-		setv targ.$unique_tintg ownr.$unique_tintg
-		setv targ.$unique_tintb ownr.$unique_tintb
-		pose targ.$unique_pose
-		tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
-
-*We'll base your ID number off your tints, just for fun:
-		sets targ.$unique_id vtos targ.$unique_tintr
-		adds targ.$unique_id vtos targ.$unique_tintg
-		adds targ.$unique_id vtos targ.$unique_tintb
-
-*parts-- 1, top button, 2, bottom
-		pat: dull 1 "elevines" 0 6 21 1
-		pat: dull 2 "elevines" 2 12 72 1
-
-
-*ctrl
-	elif keyd 16 eq 0 and keyd 17 eq 1
+	elif keyd :key_shift eq 0 and keyd :key_ctrl eq 1
 		sndc "unlk"
-*lift teleporting ball things.
-		new: comp 3 1 21051 "elevines" 13 4 2000
-
-*move it to the old one, and make it hop a bit
+		CreateElevine null
+		*move it to the old one, and make it hop a bit
 		mvsf ownr.posl ownr.post
 		velo 15 100
-		clac 1000
-
-		bhvr 3
-*activate 1 (1) activate 2 (2)
-		tick 30
-
-		attr 198
-*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
-
-		accg 30
-		elas 20
-		fric 100
-		perm 100
-
-*targ.$unique_tintg and 99 are going to be the random tints, targ.$unique_pose is the random -pose-
-		setv targ.$unique_pose rand 0 12
-		setv targ.$unique_tintr rand 50 200
-		setv targ.$unique_tintg rand 50 200
-		setv targ.$unique_tintb rand 50 200
-		pose targ.$unique_pose
-		tint targ.$unique_tintr targ.$unique_tintg targ.$unique_tintb 128 128
-
-*We'll base your ID number off your tints, just for fun:
-		sets targ.$unique_id vtos targ.$unique_tintr
-		adds targ.$unique_id vtos targ.$unique_tintg
-		adds targ.$unique_id vtos targ.$unique_tintb
-
-*parts-- 1, top button, 2, bottom
-		pat: dull 1 "elevines" 0 6 21 1
-		pat: dull 2 "elevines" 2 12 72 1
-
-*both
-	elif keyd 16 eq 1 and keyd 17 eq 1
+	elif keyd :key_shift eq 1 and keyd :key_ctrl eq 1
 		kill ownr
 	endi
 endm
 
 *Meh. I tried to avoid using a timer for this but it's just
 *SO MUCH MORE FLUID with it. ]:
-scrp 3 1 21051 9
+scrp :elevine_classifier :script_timer
 	inst
 
-*reset the attr if it's been changed
-	attr 198
-*mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
+	*reset the attr if it's been changed
+	attr 198 *mouse pickupable (2) mouseclickable (4) collisions (64) physics (128)
 
-*the indicator orbs change color. Yay.
+	* the indicator orbs change color. Yay.
 	setv $ishigher 0
 	setv $islower 0
-*check where you are
-*enum through other circles
-	enum 3 1 21051
-
-*only check ones of your code
-		doif mv00 eq targ.$unique_id
-
-*see if it's on a higher level-- that is, the y coord is less than mv10
-			doif posy lt ownr.posy
+	enum :elevine_classifier
+		doif ownr.$unique_id = targ.$unique_id
+			doif posy < ownr.posy
 				setv $ishigher 1
-*lower?
-			elif posy gt ownr.posy
+			elif posy > ownr.posy
 				setv $islower 1
 			endi
 		endi
 	next
-*pose accordingly!
 	part 1
 	pose $ishigher
 	part 2
@@ -419,6 +219,6 @@ scrp 3 1 21051 9
 endm
 
 rscr
-enum 3 1 21051
+enum :elevine_classifier
 	kill targ
 next

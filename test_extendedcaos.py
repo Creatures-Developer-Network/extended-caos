@@ -364,6 +364,19 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_constants(self):
+        input = """
+        constant :my_classifier 3 21 4000
+        constant :my_clac_script_number 1000  
+        new: simp :my_classifier "sprite_name" 1 1 1000
+        dbg: outv :my_clac_script_number
+        """
+        desired_output = """
+        new: simp 3 21 4000 "sprite_name" 1 1 1000
+        dbg: outv 1000
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -77,22 +77,6 @@ def lexcaos(s):
             ):
                 p += 1
             yield (TOK_WORD, s[basep:p])
-        elif s[p] == "$":
-            # nonstandard
-            p += 1
-            if peek(s, p) is None:
-                raise Exception("While parsing dollar var, got unexpected EOI")
-            if peek(s, p) not in string.ascii_letters + string.digits + "*:_":
-                raise Exception(
-                    "Expected variable name after '$', got '%s' (%02x)"
-                    % (peek(s, p), ord(peek(s, p)))
-                )
-            while (
-                peek(s, p)
-                and peek(s, p) in string.ascii_letters + string.digits + "*:_"
-            ):
-                p += 1
-            yield (TOK_WORD, s[basep:p])
         elif s[p] == "-":
             p += 1
             if peek(s, p) is None:
@@ -145,5 +129,34 @@ def lexcaos(s):
             while peek(s, p) and peek(s, p) not in ("\r", "\n"):
                 p += 1
             yield (TOK_COMMENT, s[basep:p])
+        elif s[p] == "$":  # nonstandard
+            p += 1
+            if peek(s, p) is None:
+                raise Exception("While parsing dollar var, got unexpected EOI")
+            if peek(s, p) not in (string.ascii_letters + string.digits + "_"):
+                raise Exception(
+                    "Expected variable name after '$', got '%s' (%02x)"
+                    % (peek(s, p), ord(peek(s, p)))
+                )
+            while (
+                peek(s, p)
+                and peek(s, p) in string.ascii_letters + string.digits + "*:_"
+            ):
+                p += 1
+            yield (TOK_WORD, s[basep:p])
+        elif s[p] == ":":  # nonstandard
+            p += 1
+            if peek(s, p) is None:
+                raise Exception("While parsing constant symbol, got unexpected EOI")
+            if peek(s, p) not in (string.ascii_letters + string.digits + "_"):
+                raise Exception(
+                    "Expected constant name after ':', got '%s' (%02x)"
+                    % (peek(s, p), ord(peek(s, p)))
+                )
+            while (
+                peek(s, p) and peek(s, p) in string.ascii_letters + string.digits + "_"
+            ):
+                p += 1
+            yield (TOK_WORD, s[basep:p])
         else:
             raise Exception("Unexpected character '%s' (%02x)" % (s[p], ord(s[p])))

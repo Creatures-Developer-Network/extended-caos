@@ -130,44 +130,36 @@ def parse_command(state, is_toplevel):
     startp = state.p
     dotcommand = False
 
-    if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1][0] == "$":
-        assert state.tokens[state.p + 1][0] == TOK_DOT
+    if state.tokens[state.p][0] != TOK_WORD:
+        raise Exception(
+            "Expected command name, got %s %s"
+            % (state.tokens[state.p][0], state.tokens[state.p][1])
+        )
+    if state.tokens[state.p][1][0] == "$" or state.tokens[state.p + 1][0] == TOK_DOT:
+        if state.tokens[state.p][1][0] == "$":
+            assert state.tokens[state.p + 1][0] == TOK_DOT
         dotcommand = True
         namespace = ""
         targ = state.tokens[state.p][1].lower()
         state.p += 2
         command = state.tokens[state.p][1].lower()
-    elif state.tokens[state.p][0] == TOK_WORD:
-        if state.tokens[state.p][1].lower() in state.command_namespaces:
-            namespace = state.tokens[state.p][1].lower()
+        if command[0] == "$":
             state.p += 1
-            eat_whitespace(state)
-            command = state.tokens[state.p][1].lower()
-        elif state.tokens[state.p + 1][0] == TOK_DOT:
-            dotcommand = True
-            namespace = ""
-            targ = state.tokens[state.p][1].lower()
-            # TODO: check it's a valid command
-            state.p += 2
-            command = state.tokens[state.p][1].lower()
-
-            if command[0] == "$":
-                state.p += 1
-                return {
-                    "type": "DotVariable",
-                    "name": command,
-                    "targ": targ,
-                    "start_token": startp,
-                    "end_token": state.p - 1,
-                }
-        else:
-            namespace = ""
-            command = state.tokens[state.p][1].lower()
+            return {
+                "type": "DotVariable",
+                "name": command,
+                "targ": targ,
+                "start_token": startp,
+                "end_token": state.p - 1,
+            }
+    elif state.tokens[state.p][1].lower() in state.command_namespaces:
+        namespace = state.tokens[state.p][1].lower()
+        state.p += 1
+        eat_whitespace(state)
+        command = state.tokens[state.p][1].lower()
     else:
-        raise Exception(
-            "Expected command name, got %s %s"
-            % (state.tokens[state.p][0], state.tokens[state.p][1])
-        )
+        namespace = ""
+        command = state.tokens[state.p][1].lower()
 
     commandnormalized = command
     if re.match(r"(?i)^va\d\d$", command):

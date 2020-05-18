@@ -376,6 +376,16 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_agentvariable_on_variable(self):
+        input = """
+        agent_variable $unique_pose ov96
+        dbg: outs $parent.$unique_pose
+        """
+        desired_output = """
+        dbg: outs avar va00 96
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
 
 if __name__ == "__main__":
     unittest.main()

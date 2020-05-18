@@ -363,6 +363,55 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_macros_toplevel2(self):
+        # This had gotten broken by some issues around lower-casing targ names for explicit targs
+        input = """
+        macro CreateElevine parent
+        	dbg: outv $parent.clac
+        endmacro
+        CreateElevine null
+        """
+        desired_output = """
+        seta va00 null
+        seta va01 targ
+        targ va00
+        setv va02 clac
+        targ va01
+        dbg: outv va02
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+    def test_macros_toplevel3(self):
+        # This was broken by including an erroneous TOK_EOI in the macro body and pasting it into the main script
+        input = """
+        macro CreateElevine parent
+        	dbg: outv $parent.clac
+        endmacro
+        CreateElevine null
+        
+        CreateElevine null
+        """
+        desired_output = """
+        seta va00 null
+        seta va01 targ
+        targ va00
+        setv va02 clac
+        targ va01
+        dbg: outv va02
+        
+        seta va00 null
+        seta va01 targ
+        targ va00
+        setv va03 clac
+        targ va01
+        dbg: outv va03
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+    def test_macros_exception_on_bad_argnames(self):
+        with self.assertRaises(Exception):
+            extendedcaos_to_caos("macro MyMacro $arg1\nendmacro")
+
     def test_constants(self):
         input = """
         constant :my_classifier 3 21 4000

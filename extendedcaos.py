@@ -376,7 +376,7 @@ def remove_double_targ(tokens):
         first_targ_name = first_targ["name"]
 
         if not (i + 2 < len(parsetree)):
-            continue
+            break
 
         second_targ = parsetree[i + 2]
         if not (
@@ -528,6 +528,10 @@ def expand_macros(tokens):
                 break
             if tokens[i][0] != TOK_WORD:
                 raise Exception("Expected argument name, got %s %s" % tokens[i])
+            if tokens[i][1][0] == "$":
+                raise Exception(
+                    "Macro argument names can't start with '$', got '%s'" % tokens[i][1]
+                )
             argnames.append(tokens[i][1])
             i += 1
 
@@ -553,9 +557,7 @@ def expand_macros(tokens):
         if tokens[endp + 1][0] == TOK_NEWLINE:
             endp += 1
 
-        macros.append(
-            (macro_name, argnames, tokens[bodypstart : bodypend + 1] + [(TOK_EOI, "")])
-        )
+        macros.append((macro_name, argnames, tokens[bodypstart : bodypend + 1]))
 
         for j in range(startp, endp + 1):
             tokens[j] = (TOK_WHITESPACE, "")
@@ -568,7 +570,8 @@ def expand_macros(tokens):
         newargnames = ["$__macro_{}_{}".format(name, a) for a in argnames]
         argnames_to_newargnames = {"$" + a: n for (a, n) in zip(argnames, newargnames)}
 
-        newbody = strip_indent(newbody)
+        # add EOI for strip_indent and then remove it, ugh
+        newbody = strip_indent(newbody + [(TOK_EOI, "")])[:-1]
 
         for j in range(len(newbody)):
             if newbody[j][0] == TOK_WORD and newbody[j][1] in argnames_to_newargnames:

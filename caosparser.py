@@ -140,9 +140,9 @@ def parse_command(state, is_toplevel):
             assert state.tokens[state.p + 1][0] == TOK_DOT
         dotcommand = True
         namespace = ""
-        targ = state.tokens[state.p][1].lower()
+        targ = state.tokens[state.p][1]
         state.p += 2
-        command = state.tokens[state.p][1].lower()
+        command = state.tokens[state.p][1]
         if command[0] == "$":
             state.p += 1
             return {
@@ -152,6 +152,7 @@ def parse_command(state, is_toplevel):
                 "start_token": startp,
                 "end_token": state.p - 1,
             }
+        command = command.lower()
     elif state.tokens[state.p][1].lower() in state.command_namespaces:
         namespace = state.tokens[state.p][1].lower()
         state.p += 1

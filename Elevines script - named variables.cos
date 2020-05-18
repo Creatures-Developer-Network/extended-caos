@@ -68,7 +68,7 @@ macro CreateElevine parent
 	adds targ.$unique_id vtos targ.$unique_tintb
 endmacro
 
-macro TeleportCreature $targetring $creature
+macro TeleportCreature targetring creature
 	doif from = null
 		stop
 	endi
@@ -138,9 +138,7 @@ scrp :elevine_classifier :script_activate_1
 		doif ownr.$unique_id = targ.$unique_id and posy < ownr.posy
 			*herein lies the tricky part-- you want it to be lower than the ring
 			*being pushed, but higher than the rest.
-			doif $targetring = null
-				seta $targetring targ
-			elif posy > $targetring.posy
+			doif $targetring = null or posy > $targetring.posy
 				seta $targetring targ
 			endi
 		endi
@@ -158,9 +156,7 @@ scrp :elevine_classifier :script_activate_2
 		doif ownr.$unique_id = targ.$unique_id and posy > ownr.posy
 			*herein lies the tricky part-- you want it to be higher than the ring
 			*being pushed, but lower than the rest.
-			doif $targetring = null
-				seta $targetring targ
-			elif posy < $targetring.posy
+			doif $targetring = null or posy < $targetring.posy
 				seta $targetring targ
 			endi
 		endi

@@ -221,7 +221,7 @@ def parse_command(state, is_toplevel):
         return {
             "type": "DotCommand",
             "targ": targ,
-            "command": command,
+            "name": command,
             "commandtype": ("statement" if is_toplevel else "expression"),
             "commandret": commandinfos[0]["type"],
             "args": args,

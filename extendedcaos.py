@@ -177,22 +177,51 @@ def toplevel_explicit_targ(tokens):
     return tokens
 
 
-def get_setx_for_command(node):
+def generate_save_result_to_variable(variable_name, node, tokens):
+    startp = node.get("start_token", node.get("token"))
+    endp = node.get("end_token", node.get("token"))
+
+    if node["type"] == "Variable":
+        # TODO: can we look at what the parent is expecting?
+        return lexcaos(
+            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi".format(
+                value=node["value"], var=variable_name
+            )
+        )[:-1]
+
+    if node["type"] == "Command" and node["commandret"] == "variable":
+        # e.g. FROM in Docking Station, which can be an agent or a string
+        return lexcaos(
+            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi".format(
+                value=tokens_to_string(
+                    tokens[node["start_token"] : node["end_token"] + 1]
+                ),
+                var=variable_name,
+            )
+        )[:-1]
+
     if node["type"] == "LiteralString":
-        return "sets"
-    if node["type"] == "LiteralInteger":
-        return "setv"
-    if node["type"] not in ("Command", "DotCommand"):
-        raise Exception(node)
-    if node["commandret"] in ("integer", "float"):
-        return "setv"
-    elif node["commandret"] in ("string",):
-        return "sets"
-    elif node["commandret"] in ("agent",):
-        return "seta"
+        setx_command = "sets"
+    elif node["type"] == "LiteralInteger":
+        setx_command = "setv"
+    elif node["type"] in ("Command", "DotCommand"):
+        if node["commandret"] in ("integer", "float"):
+            setx_command = "setv"
+        elif node["commandret"] in ("string",):
+            setx_command = "sets"
+        elif node["commandret"] in ("agent",):
+            setx_command = "seta"
+        else:
+            raise Exception("Don't know how to save result type of {}".format(node))
     else:
-        # TODO: if it's 'variable'.. look at what the parent is expecting?
         raise Exception("Don't know how to save result type of {}".format(node))
+
+    return [
+        (TOK_WORD, setx_command),
+        (TOK_WHITESPACE, " "),
+        (TOK_WORD, variable_name),
+        (TOK_WHITESPACE, " "),
+    ] + tokens[startp : endp + 1]
 
 
 def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
@@ -201,11 +230,14 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
         for a in node["args"]:
             insertions += explicit_targs_visitor(a, tokens, statement_start, True)
 
-        set_command = get_setx_for_command(node)
         indent = get_indentation_at(tokens, statement_start)
         value_variable = "$__{}_{}__t{}".format(
-            node["targ"].lstrip("$"), node["command"], node["start_token"]
+            node["targ"].lstrip("$"), node["name"], node["start_token"]
         )
+
+        newnode = dict(node)
+        newnode.update({"type": "Command", "start_token": node["start_token"] + 2})
+
         insertions.append(
             (
                 statement_start,
@@ -222,12 +254,8 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
                     (TOK_WORD, node["targ"]),
                     (TOK_NEWLINE, "\n"),
                     (TOK_WHITESPACE, indent),
-                    (TOK_WORD, set_command),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, value_variable),
-                    (TOK_WHITESPACE, " "),
                 ]
-                + tokens[node["start_token"] + 2 : node["end_token"] + 1]
+                + generate_save_result_to_variable(value_variable, newnode, tokens)
                 + [
                     (TOK_NEWLINE, "\n"),
                     (TOK_WHITESPACE, indent),
@@ -253,26 +281,17 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
             )
 
         if in_dotcommand:
-            set_command = get_setx_for_command(node)
             indent = get_indentation_at(tokens, statement_start)
             value_variable = "$__targ_{}__t{}".format(node["name"], node["start_token"])
             insertions.append(
                 (
                     statement_start,
-                    [
-                        (TOK_WORD, set_command),
-                        (TOK_WHITESPACE, " "),
-                        (TOK_WORD, value_variable),
-                        (TOK_WHITESPACE, " "),
-                    ]
-                    + tokens[node["start_token"] : node["end_token"] + 1]
-                    + [(TOK_NEWLINE, "\n"), (TOK_WHITESPACE, indent),],
+                    generate_save_result_to_variable(value_variable, node, tokens)
+                    + [(TOK_NEWLINE, "\n"), (TOK_WHITESPACE, indent)],
                 )
             )
-
+            whiteout_node_from_tokens(node, tokens)
             tokens[node["start_token"]] = (TOK_WORD, value_variable)
-            for i in range(node["start_token"] + 1, node["end_token"] + 1):
-                tokens[i] = (TOK_WHITESPACE, "")
 
         return insertions
     else:
@@ -685,46 +704,13 @@ def expand_macros(tokens):
                 a["end_token"] = a["token"]
             argvar = argnames[i]
 
-            if a["type"] == "Variable":
-                insertions.append(
-                    (
-                        insertion_point,
-                        lexcaos(
-                            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi\n".format(
-                                value=a["value"], var=argvar
-                            )
-                        ),
-                    )
+            insertions.append(
+                (
+                    insertion_point,
+                    generate_save_result_to_variable(argvar, a, tokens)
+                    + [(TOK_NEWLINE, "\n")],  # TODO: correct newline
                 )
-            elif a["type"] == "Command" and a["commandret"] == "variable":
-                # e.g. FROM in Docking Station, which can be an agent or a string
-                insertions.append(
-                    (
-                        insertion_point,
-                        lexcaos(
-                            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi\n".format(
-                                value=tokens_to_string(
-                                    tokens[a["start_token"] : a["end_token"] + 1]
-                                ),
-                                var=argvar,
-                            )
-                        ),
-                    )
-                )
-            else:
-                insertions.append(
-                    (
-                        insertion_point,
-                        [
-                            (TOK_WORD, get_setx_for_command(a)),
-                            (TOK_WHITESPACE, " "),
-                            (TOK_WORD, argvar),
-                            (TOK_WHITESPACE, " "),
-                        ]
-                        + tokens[a["start_token"] : a["end_token"] + 1]
-                        + [(TOK_NEWLINE, "\n")],  # TODO: correct newline
-                    )
-                )
+            )
             for j in range(a["start_token"], a["end_token"] + 1):
                 tokens[j] = (TOK_WHITESPACE, "")
         for j in range(toplevel["start_token"], toplevel["end_token"] + 1):

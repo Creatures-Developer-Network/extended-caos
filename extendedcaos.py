@@ -5,33 +5,19 @@ import string
 import sys
 
 from caoslexer import *
-from caosparser import parse
+from caosparser import *
 
 
 def move_comments_to_own_line(tokens):
     tokens = tokens[:]
 
-    newline_style = "\n"
-    for nt in tokens:
-        if nt[0] == TOK_NEWLINE:
-            newline_style = nt[1]
-            break
-
     i = 0
     last_newline = -1  # hack if we haven't seen a newline yet
-    last_indent = ""
     while i < len(tokens):
         t = tokens[i]
         if t[0] == TOK_EOI:
             break
-        # bookkeeping for newlines and indentation
-        if t[0] == TOK_NEWLINE and i + 1 < len(tokens):
-            if tokens[i + 1][0] == TOK_WHITESPACE:
-                last_indent = tokens[i + 1][1]
-            else:
-                last_indent = ""
-        if i == 0 and t[0] == TOK_WHITESPACE:
-            last_indent = t[1]
+        # bookkeeping for newlines
         if t[0] == TOK_NEWLINE:
             last_newline = i
             i += 1
@@ -57,12 +43,10 @@ def move_comments_to_own_line(tokens):
             del tokens[i - 1]
         # figure out where to put it
         i = last_newline + 1
-        if last_indent:
-            tokens.insert(i, (TOK_WHITESPACE, last_indent))
-            i += 1
-        tokens.insert(i, t)
-        tokens.insert(i + 1, (TOK_NEWLINE, newline_style))
-        i += 1  # on the newline we added, to do newline bookkeeping
+        tokens.insert(i, (TOK_WHITESPACE, get_indentation_at(tokens, i)))
+        tokens.insert(i + 1, t)
+        tokens.insert(i + 2, (TOK_NEWLINE, "\n"))
+        i += 2  # on the newline we added, to do newline bookkeeping
     return tokens
 
 
@@ -128,77 +112,21 @@ def get_indentation_at(tokens, i):
     return indentation
 
 
-def toplevel_explicit_targ(tokens):
-    tokens = tokens[:]
-    parsetree = parse(tokens)
-    insertions = []
-
-    for toplevel in parsetree:
-        if toplevel.get("type", "") != "DotCommand":
-            continue
-
-        indent = get_indentation_at(tokens, toplevel["start_token"])
-        insertion_point = toplevel["start_token"]
-        insertions.append(
-            (
-                insertion_point,
-                [
-                    (TOK_WORD, "seta"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_DOLLARWORD, "$__saved_targ"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, "targ"),
-                    (TOK_NEWLINE, "\n"),  # todo: newline style
-                    (TOK_WHITESPACE, indent),
-                    (TOK_WORD, "targ"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, toplevel["targ"]),
-                    (TOK_NEWLINE, "\n"),
-                    (TOK_WHITESPACE, indent),
-                ]
-                + tokens[toplevel["start_token"] + 2 : toplevel["end_token"] + 1]
-                + [
-                    (TOK_NEWLINE, "\n"),
-                    (TOK_WHITESPACE, indent),
-                    (TOK_WORD, "targ"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_DOLLARWORD, "$__saved_targ"),
-                ],
-            )
-        )
-
-        for i in range(toplevel["start_token"], toplevel["end_token"] + 1):
-            tokens[i] = (TOK_WHITESPACE, "")
-
-    for insertion_point, toks in reversed(insertions):
-        for t in reversed(toks):
-            tokens.insert(insertion_point, t)
-
-    return tokens
-
-
 def generate_save_result_to_variable(variable_name, node, tokens):
     startp = node.get("start_token", node.get("token"))
     endp = node.get("end_token", node.get("token"))
 
-    if node["type"] == "Variable":
-        # TODO: can we look at what the parent is expecting?
-        return lexcaos(
-            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi".format(
-                value=node["value"], var=variable_name
+    # TODO: can we look at what the parent is expecting?
+    # e.g. "va00", or "FROM" in Docking Station, which can be an agent or a string
+    if node["type"] == "Variable" or (
+        node["type"] == "Command" and node["commandret"] == "variable"
+    ):
+        value = tokens_to_string(tokens[startp : endp + 1])
+        return generate_snippet(
+            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi\n".format(
+                value=value, var=variable_name
             )
-        )[:-1]
-
-    if node["type"] == "Command" and node["commandret"] == "variable":
-        # e.g. FROM in Docking Station, which can be an agent or a string
-        return lexcaos(
-            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi".format(
-                value=tokens_to_string(
-                    tokens[node["start_token"] : node["end_token"] + 1]
-                ),
-                var=variable_name,
-            )
-        )[:-1]
+        )
 
     if node["type"] == "LiteralString":
         setx_command = "sets"
@@ -216,12 +144,11 @@ def generate_save_result_to_variable(variable_name, node, tokens):
     else:
         raise Exception("Don't know how to save result type of {}".format(node))
 
-    return [
-        (TOK_WORD, setx_command),
-        (TOK_WHITESPACE, " "),
-        (TOK_WORD, variable_name),
-        (TOK_WHITESPACE, " "),
-    ] + tokens[startp : endp + 1]
+    return generate_snippet(
+        "{setx} {varname} ".format(setx=setx_command, varname=variable_name),
+        tokens[startp : endp + 1],
+        "\n",
+    )
 
 
 def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
@@ -230,49 +157,27 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
         for a in node["args"]:
             insertions += explicit_targs_visitor(a, tokens, statement_start, True)
 
-        indent = get_indentation_at(tokens, statement_start)
         value_variable = "$__{}_{}__t{}".format(
             node["targ"].lstrip("$"), node["name"], node["start_token"]
         )
 
         newnode = dict(node)
         newnode.update({"type": "Command", "start_token": node["start_token"] + 2})
-
         insertions.append(
             (
                 statement_start,
-                [
-                    (TOK_WORD, "seta"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, "$__saved_targ"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, "targ"),
-                    (TOK_NEWLINE, "\n"),  # todo: newline style
-                    (TOK_WHITESPACE, indent),
-                    (TOK_WORD, "targ"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, node["targ"]),
-                    (TOK_NEWLINE, "\n"),
-                    (TOK_WHITESPACE, indent),
-                ]
-                + generate_save_result_to_variable(value_variable, newnode, tokens)
-                + [
-                    (TOK_NEWLINE, "\n"),
-                    (TOK_WHITESPACE, indent),
-                    (TOK_WORD, "targ"),
-                    (TOK_WHITESPACE, " "),
-                    (TOK_WORD, "$__saved_targ"),
-                    (TOK_NEWLINE, "\n"),
-                    (TOK_WHITESPACE, indent),
-                ],
+                generate_snippet(
+                    "seta $__saved_targ targ\n",
+                    "targ {}\n".format(node["targ"]),
+                    generate_save_result_to_variable(value_variable, newnode, tokens),
+                    "targ $__saved_targ\n",
+                ),
             )
         )
-
+        whiteout_node_from_tokens(node, tokens)
         tokens[node["start_token"]] = (TOK_WORD, value_variable)
-        for i in range(node["start_token"] + 1, node["end_token"] + 1):
-            tokens[i] = (TOK_WHITESPACE, "")
-
         return insertions
+
     elif node.get("type", "") in ("Command", "Condition"):
         insertions = []
         for a in node["args"]:
@@ -281,13 +186,11 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
             )
 
         if in_dotcommand:
-            indent = get_indentation_at(tokens, statement_start)
             value_variable = "$__targ_{}__t{}".format(node["name"], node["start_token"])
             insertions.append(
                 (
                     statement_start,
-                    generate_save_result_to_variable(value_variable, node, tokens)
-                    + [(TOK_NEWLINE, "\n"), (TOK_WHITESPACE, indent)],
+                    generate_save_result_to_variable(value_variable, node, tokens),
                 )
             )
             whiteout_node_from_tokens(node, tokens)
@@ -316,6 +219,20 @@ def get_doif_for(parsetree, p):
     raise Exception("Couldn't find matching doif")
 
 
+def generate_snippet(*args):
+    snippet = ""
+    for a in args:
+        if isinstance(a, str):
+            snippet += a
+        elif isinstance(a, list) and isinstance(a[0], tuple):
+            # must be tokens
+            snippet += tokens_to_string(a)
+        else:
+            raise Exception("Don't know how to generate snippet for %r" % a)
+    # TODO: either get rid of TOK_EOI or skip it, or something
+    return lexcaos(snippet)[:-1]
+
+
 def explicit_targs(tokens):
     tokens = tokens[:]
     parsetree = parse(tokens)
@@ -324,7 +241,6 @@ def explicit_targs(tokens):
     for i, toplevel in enumerate(parsetree):
         if toplevel["type"] not in ("Command", "Condition", "DotCommand"):
             continue
-        indent = get_indentation_at(tokens, toplevel["start_token"])
 
         insertion_point = toplevel["start_token"]
         if toplevel["type"] == "Command" and toplevel["name"] == "elif":
@@ -342,28 +258,12 @@ def explicit_targs(tokens):
             insertions.append(
                 (
                     insertion_point,
-                    [
-                        (TOK_WORD, "seta"),
-                        (TOK_WHITESPACE, " "),
-                        (TOK_WORD, "$__saved_targ"),
-                        (TOK_WHITESPACE, " "),
-                        (TOK_WORD, "targ"),
-                        (TOK_NEWLINE, "\n"),  # todo: newline style
-                        (TOK_WHITESPACE, indent),
-                        (TOK_WORD, "targ"),
-                        (TOK_WHITESPACE, " "),
-                        (TOK_WORD, toplevel["targ"]),
-                        (TOK_NEWLINE, "\n"),
-                        (TOK_WHITESPACE, indent),
-                    ]
-                    + tokens[toplevel["start_token"] + 2 : toplevel["end_token"] + 1]
-                    + [
-                        (TOK_NEWLINE, "\n"),
-                        (TOK_WHITESPACE, indent),
-                        (TOK_WORD, "targ"),
-                        (TOK_WHITESPACE, " "),
-                        (TOK_WORD, "$__saved_targ"),
-                    ],
+                    generate_snippet(
+                        "seta $__saved_targ targ\n",
+                        "targ {}\n".format(toplevel["targ"]),
+                        tokens[toplevel["start_token"] + 2 : toplevel["end_token"] + 1],
+                        "\ntarg $__saved_targ",
+                    ),
                 )
             )
 
@@ -371,7 +271,10 @@ def explicit_targs(tokens):
                 tokens[j] = (TOK_WHITESPACE, "")
 
     for insertion_point, toks in reversed(insertions):
+        indent = get_indentation_at(tokens, insertion_point)
         for t in reversed(toks):
+            if t[0] == TOK_NEWLINE:
+                tokens.insert(insertion_point, (TOK_WHITESPACE, indent))
             tokens.insert(insertion_point, t)
 
     return tokens
@@ -385,7 +288,10 @@ def remove_extraneous_targ_saving(tokens):
         p = i + 1
         while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
             p += 1
-        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower()[0:2] == "va"):
+        if not (
+            tokens[p][0] == TOK_WORD
+            and (tokens[p][1].lower()[0:2] == "va" or tokens[p][1][0] == "$")
+        ):
             continue
         var_name = tokens[p][1]
         p += 1
@@ -418,9 +324,6 @@ def whiteout_node_from_tokens(node, tokens):
     newstartp = startp
     while newstartp > 0 and tokens[newstartp - 1][0] == TOK_WHITESPACE:
         newstartp -= 1
-
-    # if newstartp == 0 or tokens[newstartp][0] == TOK_NEWLINE:
-    #     startp = newstartp
 
     newendp = endp
     while tokens[newendp + 1][0] == TOK_WHITESPACE:
@@ -512,18 +415,19 @@ def expand_agentvariables(tokens):
             variable_index = var_mapping[node["name"]][2:4]
             if node["targ"] == "targ":
                 insertions.append(
-                    (insertion_point, [(TOK_WORD, "ov" + variable_index),],)
+                    (insertion_point, generate_snippet("ov" + variable_index))
                 )
             elif node["targ"] == "ownr":
                 insertions.append(
-                    (insertion_point, [(TOK_WORD, "mv" + variable_index),],)
+                    (insertion_point, generate_snippet("mv" + variable_index))
                 )
             else:
                 insertions.append(
                     (
                         insertion_point,
-                        # TODO: make it so you can easily use lexcaos to generate snippets. either get rid of TOK_EOI, or add logic to insertions to ignore it/halt
-                        lexcaos("avar {} {}".format(node["targ"], variable_index))[:-1],
+                        generate_snippet(
+                            "avar {} {}".format(node["targ"], variable_index)
+                        ),
                     )
                 )
             whiteout_node_from_tokens(node, tokens)
@@ -541,8 +445,9 @@ def expand_agentvariables(tokens):
     return tokens
 
 
-def strip_indent(tokens, indent):
+def strip_indent(tokens):
     tokens = tokens[:]
+    indent = get_indentation_at(tokens, 0)
     i = 0
 
     while True:
@@ -663,7 +568,7 @@ def expand_macros(tokens):
         newargnames = ["$__macro_{}_{}".format(name, a) for a in argnames]
         argnames_to_newargnames = {"$" + a: n for (a, n) in zip(argnames, newargnames)}
 
-        newbody = strip_indent(newbody, get_indentation_at(body, 0))
+        newbody = strip_indent(newbody)
 
         for j in range(len(newbody)):
             if newbody[j][0] == TOK_WORD and newbody[j][1] in argnames_to_newargnames:
@@ -705,11 +610,7 @@ def expand_macros(tokens):
             argvar = argnames[i]
 
             insertions.append(
-                (
-                    insertion_point,
-                    generate_save_result_to_variable(argvar, a, tokens)
-                    + [(TOK_NEWLINE, "\n")],  # TODO: correct newline
-                )
+                (insertion_point, generate_save_result_to_variable(argvar, a, tokens))
             )
             for j in range(a["start_token"], a["end_token"] + 1):
                 tokens[j] = (TOK_WHITESPACE, "")
@@ -763,22 +664,16 @@ def replace_constants(tokens):
 
 
 def extendedcaos_to_caos(s):
-    tokens = list(lexcaos(s))
+    tokens = lexcaos(s)
+    # this has to come first
     tokens = move_comments_to_own_line(tokens)
-    # tokens = remove_dummies(tokens)
+    # TODO: teach parser about macros, so this doesn't have to happen before parsing
     tokens = expand_macros(tokens)
-    # tokens = remove_dummies(tokens)
-    tokens = expand_agentvariables(tokens)
-    # tokens = remove_dummies(tokens)
     tokens = explicit_targs(tokens)
-    # tokens = remove_dummies(tokens)
-    tokens = namedvariables_to_vaxx(tokens)
-    # tokens = remove_dummies(tokens)
     tokens = replace_constants(tokens)
-    # tokens = remove_dummies(tokens)
     tokens = remove_extraneous_targ_saving(tokens)
-    # tokens = remove_dummies(tokens)
     tokens = remove_double_targ(tokens)
-    # tokens = remove_dummies(tokens)
+    tokens = expand_agentvariables(tokens)
+    tokens = namedvariables_to_vaxx(tokens)
 
     return tokens_to_string(tokens)

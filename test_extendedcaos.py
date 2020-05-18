@@ -318,7 +318,7 @@ class TestExtendedCAOS(unittest.TestCase):
 
     def test_strip_indent(self):
         self.assertMultiLineEqual(
-            tokens_to_string(strip_indent(lexcaos("  bang\n    bang\nbang"), "  ")),
+            tokens_to_string(strip_indent(lexcaos("  bang\n    bang\nbang"))),
             "bang\n  bang\nbang",
         )
 

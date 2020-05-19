@@ -666,13 +666,116 @@ def replace_constants(tokens):
     return tokens
 
 
+def handle_condition_short_circuiting(tokens):
+    tokens = tokens[:]
+
+    insertions = []
+    parsetree = parse(tokens)
+    for node in parsetree:
+        if not (node["type"] == "Command" and node["name"].lower() == "doif"):
+            continue
+
+        assert len(node["args"]) == 1
+        assert node["args"][0]["type"] == "Condition"
+
+        condition_args = node["args"][0]["args"]
+        needs_short_circuit = len(condition_args) > 3
+        if not needs_short_circuit:
+            continue
+
+        # this is the tricky part
+        conditionvar = "$__condition_" + str(node["start_token"])
+        snippet_parts = [
+            "setv {} 0\n".format(conditionvar),
+        ]
+        i = 0
+        combiner = None
+        while i < len(condition_args):
+            startp = condition_args[i].get(
+                "start_token", condition_args[i].get("token")
+            )
+            endp = condition_args[i + 2].get(
+                "end_token", condition_args[i + 2].get("token")
+            )
+            if combiner is None:
+                snippet_parts += [
+                    "doif ",
+                    tokens[startp : endp + 1],
+                    "\n",
+                    "  setv {} 1\n".format(conditionvar),
+                    "endi\n",
+                ]
+            elif combiner == "and":
+                # TODO: negate this condition instead of the weird empty doif body?
+                snippet_parts += [
+                    "doif {} = 1\n".format(conditionvar),
+                    "  doif ",
+                    tokens[startp : endp + 1],
+                    "\n",
+                    "  else\n".format(conditionvar),
+                    "    setv {} 0\n".format(conditionvar),
+                    "  endi\n",
+                    "endi\n",
+                ]
+            elif combiner == "or":
+                snippet_parts += [
+                    "doif {} = 0\n".format(conditionvar),
+                    "  doif ",
+                    tokens[startp : endp + 1],
+                    "\n",
+                    "    setv {} 1\n".format(conditionvar),
+                    "  endi\n",
+                    "endi\n",
+                ]
+            else:
+                assert False
+            i += 3
+            if i < len(condition_args):
+                combiner = condition_args[i]["value"].lower()
+                i += 1
+
+        snippet_parts.append("doif {} = 1\n".format(conditionvar))
+
+        insertions.append((node["start_token"], generate_snippet(*snippet_parts)))
+
+        whiteout_node_from_tokens(node, tokens)
+
+        # print(tokens_to_string(generate_snippet(*snippet_parts)))
+
+        #
+        # insertions.append(
+        #     (node["start_token"], generate_snippet(
+        #
+        #     "setv {} 0\n".format(conditionvar)
+        #
+        #
+        #
+        # ))
+        # )
+
+        # print(node)
+        # print(needs_manual_short_circuit)
+
+    for insertion_point, toks in reversed(insertions):
+        indent = get_indentation_at(tokens, insertion_point)
+        for t in reversed(toks):
+            if t[0] == TOK_NEWLINE:
+                tokens.insert(insertion_point, (TOK_WHITESPACE, indent))
+            tokens.insert(insertion_point, t)
+
+    return tokens
+
+
 def extendedcaos_to_caos(s):
     tokens = lexcaos(s)
     # this has to come first
     tokens = move_comments_to_own_line(tokens)
     # TODO: teach parser about macros, so this doesn't have to happen before parsing
     tokens = expand_macros(tokens)
-    tokens = explicit_targs(tokens)
+    tokens = handle_condition_short_circuiting(
+        tokens
+    )  # TODO: move above macro expansion
+    tokens = explicit_targs(tokens)  # TODO: make this ignore conditions?
     tokens = replace_constants(tokens)
     tokens = remove_extraneous_targ_saving(tokens)
     tokens = remove_double_targ(tokens)

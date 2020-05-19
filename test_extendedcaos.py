@@ -435,6 +435,42 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_short_circuit_doifs(self):
+        input = """
+        doif $parent = null or posy > $parent.posy and 1 eq 2
+            dbg: outv "true"
+        else
+            dbg: outv "false"
+        endi
+        """
+        desired_output = """
+setv va00 0
+            doif va01 = null
+              setv va00 1
+            endi
+            doif va00 = 0
+              seta va02 targ
+              targ va01
+              setv va03 posy
+              targ va02
+              doif posy > va03
+                setv va00 1
+              endi
+            endi
+            doif va00 = 1
+              doif 1 eq 2
+              else
+                setv va00 0
+              endi
+            endi
+            doif va00 = 1
+                        dbg: outv "true"
+        else
+            dbg: outv "false"
+        endi
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
 
 if __name__ == "__main__":
     unittest.main()

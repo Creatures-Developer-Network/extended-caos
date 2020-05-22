@@ -642,6 +642,16 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_parse_face(self):
+        # FACE is a different command depending on the expected return type
+        # openc2e handles this in a weird way, and thus commandinfo.json is weird
+        # Make sure our hack fix keeps working even if the commandinfo is changed
+        input = """
+            dbg: outs face
+            dbg: outv face
+        """
+        self.assertMultiLineEqual(input, extendedcaos_to_caos(input))
+
 
 if __name__ == "__main__":
     unittest.main()

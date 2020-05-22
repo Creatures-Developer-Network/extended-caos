@@ -475,7 +475,7 @@ def parse_value(state):
 def parse(tokens):
     logger.debug("Parsing...")
     command_info = {}
-    for ci in COMMAND_INFO["variants"]["c3"].values():
+    for ci in COMMAND_INFO_C3:
         is_toplevel = ci["type"] == "command"
         key = (ci.get("namespace", "").lower(), ci["match"].lower(), is_toplevel)
         command_info[key] = ci

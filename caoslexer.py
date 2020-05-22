@@ -18,6 +18,7 @@ class TokenType:
         return self.name
 
 
+TOK_CHARACTER = TokenType("TOK_CHARACTER")
 TOK_COMMENT = TokenType("TOK_COMMENT")
 TOK_INTEGER = TokenType("TOK_INTEGER")
 TOK_FLOAT = TokenType("TOK_FLOAT")
@@ -126,6 +127,18 @@ def lexcaos(s):
                     break
                 else:
                     p += 1
+        elif s[p] == "'":
+            p += 1
+            if peek(s, p) == "\\":
+                p += 1
+            p += 1
+            if not peek(s, p) or peek(s, p) != "'":
+                raise Exception(
+                    "While parsing literal character, expected single quote but got %r %x"
+                    % (peek(s, p), ord(peek(s, p)))
+                )
+            p += 1
+            yield (TOK_CHARACTER, s[basep:p])
         elif s[p] == "<" and peek(s, p + 1) == ">":
             p += 2
             yield (TOK_WORD, "<>")

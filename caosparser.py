@@ -285,7 +285,7 @@ def parse_constant_definition(state):
     values = []
 
     eat_whitespace(state)
-    if state.tokens[state.p][0] not in (TOK_INTEGER, TOK_STRING):
+    if state.tokens[state.p][0] not in (TOK_INTEGER, TOK_STRING, TOK_CHARACTER):
         raise Exception(
             "Expected literal in 'constant' definition, got %r"
             % (state.tokens[state.p],)
@@ -299,7 +299,7 @@ def parse_constant_definition(state):
         eat_whitespace(state)
         if state.tokens[state.p][0] in (TOK_NEWLINE, TOK_EOI):
             break
-        if state.tokens[state.p][0] not in (TOK_INTEGER, TOK_STRING):
+        if state.tokens[state.p][0] not in (TOK_INTEGER, TOK_STRING, TOK_CHARACTER):
             raise Exception(
                 "Expected literal in 'constant' definition, got %r"
                 % (state.tokens[state.p],)
@@ -448,7 +448,7 @@ def parse_value(state):
             )
             return {"type": "Variable", "value": value, "token": startp}
         return parse_command(state, False)
-    elif state.tokens[state.p][0] == TOK_INTEGER:
+    elif state.tokens[state.p][0] in (TOK_INTEGER, TOK_CHARACTER):
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))

@@ -234,6 +234,24 @@ def get_doif_for(parsetree, p):
     raise Exception("Couldn't find matching doif")
 
 
+def get_endi_index_for(parsetree, p):
+    assert parsetree[p]["type"] == "Command"
+    assert parsetree[p]["name"] == "elif"
+
+    nesting = 0
+
+    while True:
+        p += 1
+        if parsetree[p]["type"] == "Command" and parsetree[p]["name"] == "doif":
+            nesting += 1
+        elif parsetree[p]["type"] == "Command" and parsetree[p]["name"] == "endi":
+            if nesting == 0:
+                return p
+            else:
+                nesting -= 1
+    raise Exception("Couldn't find matching endi")
+
+
 def generate_snippet(*args):
     snippet = ""
     for a in args:
@@ -259,7 +277,9 @@ def explicit_targs(tokens):
 
         insertion_point = toplevel["start_token"]
         if toplevel["type"] == "Command" and toplevel["name"] == "elif":
-            # uh-oh. go find last doif
+            # uh-oh. go find last doif. this shouldn't ever have any insertions
+            # since we've converted elifs into elses/doifs, but keep this just in
+            # case
             matching_doif = get_doif_for(parsetree, i)
             insertion_point = matching_doif["start_token"]
 
@@ -648,6 +668,46 @@ def replace_constants(tokens):
     return tokens
 
 
+def turn_elifs_into_elses(tokens):
+    tokens = tokens[:]
+    while True:
+        nodes = parse(tokens)
+        insertions = []
+        modified_tree = False
+        for p, node in enumerate(nodes):
+            if not (node["type"] == "Command" and node["name"] == "elif"):
+                continue
+
+            # tricky — find everything until the matching endi
+            endi_index = get_endi_index_for(nodes, p)
+
+            # add new else, and change us to a doif
+            indent = get_indentation_at(tokens, node["start_token"])
+            insertions.append(
+                (node["start_token"], generate_snippet("else\n" + indent + "  "))
+            )
+            tokens[node["start_token"]] = (TOK_WORD, "doif")
+            # indent everything
+            for j in range(p + 1, endi_index):
+                insertions.append((nodes[j]["start_token"], generate_snippet("  ")))
+            # add new endi
+            insertions.append(
+                (
+                    nodes[endi_index]["start_token"],
+                    generate_snippet("  endi\n" + indent),
+                )
+            )
+            modified_tree = True
+            break
+        if not modified_tree:
+            break
+        for insertion_point, toks in reversed(insertions):
+            for t in reversed(toks):
+                tokens.insert(insertion_point, t)
+
+    return tokens
+
+
 def handle_condition_short_circuiting(tokens):
     tokens = tokens[:]
 
@@ -763,6 +823,10 @@ def extendedcaos_to_caos(s):
     tokens = lexcaos(s)
     # this has to come first
     tokens = move_comments_to_own_line(tokens)
+    # and this absolutely must come second - other transformations make the
+    # assumption that commands on a previous line will execute first. ELIF is
+    # the one command that breaks that rule!
+    tokens = turn_elifs_into_elses(tokens)
     tokens = handle_condition_short_circuiting(tokens)
     tokens = expand_macros(tokens)
     tokens = explicit_targs(tokens)

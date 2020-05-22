@@ -193,30 +193,32 @@ class TestExtendedCAOS(unittest.TestCase):
 
     def test_explicit_targ_in_doif(self):
         input = """
-            doif movs <> 0
-                dbg: outv 0
-                doif 0 < 1
-                endi
-            elif posy > ownr.posy
-                dbg: outv 1
-            else
-                dbg: outv 2
+        doif movs <> 0
+            dbg: outv 0
+            doif 0 < 1
             endi
+        elif posy > ownr.posy
+            dbg: outv 1
+        else
+            dbg: outv 2
+        endi
         """
         desired_output = """
-            seta va00 targ
-            targ ownr
-            setv va01 posy
-            targ va00
-            doif movs <> 0
-                dbg: outv 0
-                doif 0 < 1
-                endi
-            elif posy > va01
-                dbg: outv 1
-            else
-                dbg: outv 2
+        doif movs <> 0
+            dbg: outv 0
+            doif 0 < 1
             endi
+        else
+          seta va00 targ
+          targ ownr
+          setv va01 posy
+          targ va00
+          doif posy > va01
+              dbg: outv 1
+          else
+              dbg: outv 2
+          endi
+        endi
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
@@ -435,12 +437,49 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_transform_elifs_into_elses(self):
+        input = """
+        doif 1 = 1
+            dbg: outs "first branch"
+        elif 2 = 3 or 4 = 5
+            dbg: outs "second branch"
+        elif 6 = 7 or 8 = 9
+            dbg: outs "third branch"
+        elif 10 = 11
+            dbg: outs "fourth branch"
+        else
+            dbg: outs "fifth branch"
+        endi
+        """
+        desired_output = """
+        doif 1 = 1
+            dbg: outs "first branch"
+        else
+          doif 2 = 3 or 4 = 5
+              dbg: outs "second branch"
+          else
+            doif 6 = 7 or 8 = 9
+                dbg: outs "third branch"
+            else
+              doif 10 = 11
+                  dbg: outs "fourth branch"
+              else
+                  dbg: outs "fifth branch"
+              endi
+            endi
+          endi
+        endi
+        """
+        self.assertMultiLineEqual(
+            desired_output, tokens_to_string(turn_elifs_into_elses(lexcaos(input)))
+        )
+
     def test_short_circuit_doifs(self):
         input = """
         doif $parent = null or posy > $parent.posy and 1 eq 2
-            dbg: outv "true"
+            dbg: outs "true"
         else
-            dbg: outv "false"
+            dbg: outs "false"
         endi
         """
         desired_output = """
@@ -464,9 +503,9 @@ class TestExtendedCAOS(unittest.TestCase):
           endi
         endi
         doif va00 = 1
-            dbg: outv "true"
+            dbg: outs "true"
         else
-            dbg: outv "false"
+            dbg: outs "false"
         endi
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))

@@ -349,7 +349,13 @@ class TestExtendedCAOS(unittest.TestCase):
         desired_output = """
         sets va00 "MY SPRITE"
         * macro with variable
-        doif type va00 = 0 or type va00 = 1 setv va01 va00 elif type va00 = 2 sets va01 va00 else seta va01 va00 endi
+        doif type va00 = 0 or type va00 = 1
+            setv va01 va00
+        elif type va00 = 2
+            sets va01 va00
+        else
+            seta va01 va00
+        endi
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000
         * macro with literal
@@ -357,7 +363,13 @@ class TestExtendedCAOS(unittest.TestCase):
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000
         * macro with command of an unknown result type
-        doif type from = 0 or type from = 1 setv va01 from elif type from = 2 sets va01 from else seta va01 from endi
+        doif type from = 0 or type from = 1
+            setv va01 from
+        elif type from = 2
+            sets va01 from
+        else
+            seta va01 from
+        endi
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000
         * make sure original variable is untouched

@@ -137,8 +137,9 @@ def generate_save_result_to_variable(variable_name, node, tokens):
         node["type"] == "Command" and node["commandret"] == "variable"
     ):
         value = tokens_to_string(tokens[startp : endp + 1])
+        indent = get_indentation_at(tokens, startp)
         return generate_snippet(
-            "doif type {value} = 0 or type {value} = 1 setv {var} {value} elif type {value} = 2 sets {var} {value} else seta {var} {value} endi\n".format(
+            "doif type {value} = 0 or type {value} = 1\n    setv {var} {value}\nelif type {value} = 2\n    sets {var} {value}\nelse\n    seta {var} {value}\nendi\n".format(
                 value=value, var=variable_name
             )
         )

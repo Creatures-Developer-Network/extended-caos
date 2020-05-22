@@ -409,50 +409,34 @@ def whiteout_node_and_line_from_tokens(node, tokens):
 
 def remove_double_targ(tokens):
     tokens = tokens[:]
-    for i in range(len(tokens)):
-        p = i
-        startdelp = p
-        if not (tokens[i][0] == TOK_WORD and tokens[i][1].lower() == "targ"):
-            continue
-        p = i + 1
-        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            p += 1
-        if not tokens[p][0] == TOK_WORD:
-            continue
-        p += 1
-        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            p += 1
-        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == "targ"):
-            continue
-        enddelp = p - 1
 
-        for j in range(startdelp, enddelp + 1):
-            tokens[j] = (TOK_WHITESPACE, "")
+    # TODO: do this without parsing twice
 
     parsetree = parse(tokens)
-
-    for i, toplevel in enumerate(parsetree):
-        if not (toplevel["type"] == "Command" and toplevel["name"] == "targ"):
-            continue
-        first_targ = toplevel["args"][0]
-
-        if not (first_targ["type"] == "Command" and first_targ["args"] == []):
-            continue
-        first_targ_name = first_targ["name"]
-
-        if not (i + 2 < len(parsetree)):
-            break
-
-        second_targ = parsetree[i + 2]
-        if not (
-            second_targ["type"] == "Command"
-            and second_targ["name"] == "targ"
-            and second_targ["args"][0]["type"] == "Command"
-            and second_targ["args"][0]["name"] == first_targ_name
+    for i, node in enumerate(parsetree):
+        if (
+            node["type"] == "Command"
+            and node["name"] == "targ"
+            and i + 1 < len(parsetree)
+            and parsetree[i + 1]["type"] == "Command"
+            and parsetree[i + 1]["name"] == "targ"
         ):
-            continue
+            whiteout_node_and_line_from_tokens(node, tokens)
 
-        whiteout_node_and_line_from_tokens(second_targ, tokens)
+    parsetree = parse(tokens)
+    for i, node in enumerate(parsetree):
+        if (
+            node["type"] == "Command"
+            and node["name"] == "targ"
+            and node["args"][0]["type"] == "Command"
+            and node["args"][0]["args"] == []
+            and i + 2 < len(parsetree)
+            and parsetree[i + 2]["type"] == "Command"
+            and parsetree[i + 2]["name"] == "targ"
+            and parsetree[i + 2]["args"][0]["type"] == "Command"
+            and parsetree[i + 2]["args"][0]["name"] == node["args"][0]["name"]
+        ):
+            whiteout_node_and_line_from_tokens(parsetree[i + 2], tokens)
 
     return tokens
 

@@ -626,6 +626,22 @@ class TestExtendedCAOS(unittest.TestCase):
             "        ", get_indentation_at_previous_line(tokens, len(tokens) - 2)
         )
 
+    def test_remove_double_targ_when_first_targ_is_expression(self):
+        # this failed when we were just looking at tokens, not parsed nodes
+        input = """
+        doif 1 = 1
+        	kill targ
+        endi
+        targ ownr
+        """
+        desired_output = """
+        doif 1 = 1
+        	kill targ
+        endi
+        targ ownr
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
 
 if __name__ == "__main__":
     unittest.main()

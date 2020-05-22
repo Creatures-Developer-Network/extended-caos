@@ -153,16 +153,9 @@ def get_command_info(state, namespace, command_name, is_toplevel):
     if re.match(r"^mv\d\d$", command_name):
         commandnormalized = "mvxx"
 
-    for ci in state.commands.values():
-        if (
-            ci.get("namespace", "").lower() == namespace
-            and ci.get("match", "").lower() == commandnormalized
-            and (
-                (is_toplevel and ci.get("type") == "command")
-                or (not is_toplevel and ci.get("type") != "command")
-            )
-        ):
-            return ci
+    ci = state.commands.get((namespace, commandnormalized, is_toplevel))
+    if ci:
+        return ci
 
     if is_toplevel and namespace == "" and commandnormalized in state.macro_definitions:
         return {
@@ -480,7 +473,12 @@ def parse_value(state):
 
 
 def parse(tokens):
-    command_info = dict(COMMAND_INFO["variants"]["c3"])
+    logger.debug("Parsing...")
+    command_info = {}
+    for ci in COMMAND_INFO["variants"]["c3"].values():
+        is_toplevel = ci["type"] == "command"
+        key = (ci.get("namespace", "").lower(), ci["match"].lower(), is_toplevel)
+        command_info[key] = ci
     state = ParserState(tokens, command_info)
     fst = []
     while True:

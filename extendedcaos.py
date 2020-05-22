@@ -118,15 +118,37 @@ def get_indentation_at_previous_line(tokens, i):
     assert tokens[i][0] != TOK_NEWLINE
     original_i = i
 
-    while i >= 0:
-        if tokens[i][0] == TOK_NEWLINE:
-            break
+    while True:
+        # go backwards to newline or beginning of input
+        while i >= 0:
+            if tokens[i][0] == TOK_NEWLINE:
+                break
+            i -= 1
+
+        # if we hit the beginning of the input, just return the indent of the original line
+        if i <= 0:
+            return get_indentation_at(tokens, original_i)
+
+        # now we're at the newline ending the previous line
+        # we want to know if there's anything here, or if it's just whitespace
         i -= 1
+        while i >= 0:
+            if tokens[i][0] == TOK_WHITESPACE:
+                i -= 1
+            else:
+                break
 
-    if i <= 0:
-        return get_indentation_at(tokens, original_i)
+        # if we hit the beginning of the input, just return the indent of the original line
+        if i <= 0:
+            return get_indentation_at(tokens, original_i)
 
-    return get_indentation_at(tokens, i - 1)
+        # if it's a newline, then this line was just whitespace. continue
+        if tokens[i][0] == TOK_NEWLINE:
+            i -= 1
+            continue
+
+        # otherwise we have a line with something other than whitespace
+        return get_indentation_at(tokens, i)
 
 
 def generate_save_result_to_variable(variable_name, node, tokens):

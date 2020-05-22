@@ -614,6 +614,18 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_get_indentation_at_previous_line_when_previous_line_is_blank(self):
+        input = """
+        endi
+    
+                
+
+        doif"""
+        tokens = lexcaos(input)
+        self.assertEqual(
+            "        ", get_indentation_at_previous_line(tokens, len(tokens) - 2)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

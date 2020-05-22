@@ -572,16 +572,15 @@ def expand_macros(tokens):
             )
         whiteout_node_from_tokens(toplevel, tokens)
 
-        indent = get_indentation_at(tokens, insertion_point)
         insertions.append(
-            (
-                insertion_point,
-                add_indent(macros_by_name[toplevel["name"].lower()][1], indent),
-            )
+            (insertion_point, macros_by_name[toplevel["name"].lower()][1],)
         )
 
     for insertion_point, toks in reversed(insertions):
+        indent = get_indentation_at(tokens, insertion_point)
         for t in reversed(toks):
+            if t[0] == TOK_NEWLINE:
+                tokens.insert(insertion_point, (TOK_WHITESPACE, indent))
             tokens.insert(insertion_point, t)
 
     return tokens

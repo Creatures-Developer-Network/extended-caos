@@ -481,7 +481,7 @@ class TestExtendedCAOS(unittest.TestCase):
         MyMacro
         """
         desired_output = """
-                setv va00 0
+        setv va00 0
         doif va01 = null
           setv va00 1
         endi

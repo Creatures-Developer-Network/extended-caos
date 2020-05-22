@@ -161,7 +161,7 @@ def get_command_info(state, namespace, command_name, is_toplevel):
         }
 
     raise Exception(
-        "Unknown command '%s'" % ((namespace + " " if namespace else "") + command)
+        "Unknown command '%s'" % ((namespace + " " if namespace else "") + command_name)
     )
 
 
@@ -468,9 +468,8 @@ def parse_value(state):
         raise Exception("Unimplemented token type %s" % state.tokens[state.p][0])
 
 
-def parse(tokens, extra_command_info={}):
+def parse(tokens):
     command_info = dict(COMMAND_INFO["variants"]["c3"])
-    command_info.update(extra_command_info)
     state = ParserState(tokens, command_info)
     fst = []
     while True:

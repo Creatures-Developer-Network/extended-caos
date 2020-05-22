@@ -497,7 +497,6 @@ def expand_macros(tokens):
 
     # collect macros
     macros = []
-
     for node in parse(tokens):
         if not node["type"] == "MacroDefinition":
             continue
@@ -515,7 +514,6 @@ def expand_macros(tokens):
                 tokens[node["body_start_token"] : node["body_end_token"] + 1],
             )
         )
-        whiteout_node_and_line_from_tokens(node, tokens)
 
     # fixup macros
     for i in range(len(macros)):
@@ -533,26 +531,18 @@ def expand_macros(tokens):
                 newbody[j] = (TOK_WORD, argnames_to_newargnames[newbody[j][1]])
         macros[i] = (name, newargnames, newbody)
 
-    macros_as_commands = {
-        "macro_{}".format(name): {
-            "arguments": [
-                {"name": argname, "type": "anything"} for argname in argnames
-            ],
-            "name": name,
-            "match": name,
-            "type": "command",
-        }
-        for (name, argnames, body) in macros
-    }
     macros_by_name = {
         name.lower(): (argnames, body) for (name, argnames, body) in macros
     }
 
     # parse and do expansions
-    parsetree = parse(tokens, macros_as_commands)
+    parsetree = parse(tokens)
     insertions = []
     for toplevel in parsetree:
-        if toplevel.get("type") != "Command":
+        if toplevel["type"] == "MacroDefinition":
+            whiteout_node_and_line_from_tokens(toplevel, tokens)
+            continue
+        if toplevel["type"] != "Command":
             continue
         if toplevel["name"].lower() not in macros_by_name:
             continue

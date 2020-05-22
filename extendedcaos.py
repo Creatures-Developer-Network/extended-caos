@@ -112,6 +112,21 @@ def get_indentation_at(tokens, i):
     return indentation
 
 
+def get_indentation_at_previous_line(tokens, i):
+    assert tokens[i][0] != TOK_NEWLINE
+    original_i = i
+
+    while i >= 0:
+        if tokens[i][0] == TOK_NEWLINE:
+            break
+        i -= 1
+
+    if i <= 0:
+        return get_indentation_at(tokens, original_i)
+
+    return get_indentation_at(tokens, i - 1)
+
+
 def generate_save_result_to_variable(variable_name, node, tokens):
     startp = node.get("start_token", node.get("token"))
     endp = node.get("end_token", node.get("token"))
@@ -614,11 +629,12 @@ def handle_condition_short_circuiting(tokens):
     parsetree = parse(tokens)
 
     def visit(node):
-        if not (node["type"] == "Command" and node["name"].lower() == "doif"):
+        if not (
+            node["type"] == "Command"
+            and len(node["args"]) == 1
+            and node["args"][0]["type"] == "Condition"
+        ):
             return
-
-        assert len(node["args"]) == 1
-        assert node["args"][0]["type"] == "Condition"
 
         condition_args = node["args"][0]["args"]
         needs_short_circuit = len(condition_args) > 3
@@ -676,11 +692,39 @@ def handle_condition_short_circuiting(tokens):
                 combiner = condition_args[i]["value"].lower()
                 i += 1
 
-        snippet_parts.append("doif {} = 1".format(conditionvar))
+        # remove last newline, or the wrong indentation will be added to it
+        if snippet_parts[-1][-1] == "\n":
+            snippet_parts[-1] = snippet_parts[-1][:-1]
 
-        insertions.append((node["start_token"], generate_snippet(*snippet_parts)))
+        # figure out indentation - if we're coming down a level, we want these insertions to be at the previous indentation
+        previous_indent = get_indentation_at_previous_line(tokens, node["start_token"])
+        current_indent = get_indentation_at(tokens, node["start_token"])
 
-        whiteout_node_from_tokens(node, tokens)
+        if len(previous_indent) < len(current_indent):
+            # if the previous indent is smaller, we just went up a level, so stay there
+            previous_indent = current_indent
+
+        insertions.append(
+            (
+                node["start_token"],
+                add_indent(generate_snippet(*snippet_parts), previous_indent),
+            )
+        )
+
+        indent = get_indentation_at(tokens, node["start_token"])
+        insertions.append(
+            (
+                node["start_token"],
+                [(TOK_NEWLINE, "\n")]
+                + add_indent(
+                    generate_snippet("{} {} = 1".format(node["name"], conditionvar)),
+                    indent,
+                )
+                + [(TOK_NEWLINE, "\n")],
+            )
+        )
+
+        whiteout_node_and_line_from_tokens(node, tokens)
 
     for node in parsetree:
         if node["type"] == "MacroDefinition":
@@ -689,10 +733,7 @@ def handle_condition_short_circuiting(tokens):
         visit(node)
 
     for insertion_point, toks in reversed(insertions):
-        indent = get_indentation_at(tokens, insertion_point)
         for t in reversed(toks):
-            if t[0] == TOK_NEWLINE:
-                tokens.insert(insertion_point, (TOK_WHITESPACE, indent))
             tokens.insert(insertion_point, t)
 
     return tokens

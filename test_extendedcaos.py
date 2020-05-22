@@ -410,6 +410,22 @@ class TestExtendedCAOS(unittest.TestCase):
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_macros_remove_comments_when_removing_macro_definition(self):
+        input = """
+        macro MyMacro
+            dbg: outs "hello"
+            * this is a comment
+            dbg: outs " world"
+        endmacro
+        MyMacro
+        """
+        desired_output = """
+        dbg: outs "hello"
+        * this is a comment
+        dbg: outs " world"
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
     def test_macros_exception_on_bad_argnames(self):
         with self.assertRaises(Exception):
             extendedcaos_to_caos("macro MyMacro $arg1\nendmacro")

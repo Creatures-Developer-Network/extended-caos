@@ -592,16 +592,23 @@ def expand_macros(tokens):
     # parse and do expansions
     parsetree = parse(tokens)
     insertions = []
-    inside_macro = False
+    last_macro_start_token = None
     for toplevel in parsetree:
-        if inside_macro:
-            if toplevel["type"] == "MacroDefinitionEnd":
-                inside_macro = False
-            whiteout_node_and_line_from_tokens(toplevel, tokens)
+        if toplevel["type"] == "MacroDefinitionEnd":
+            # need to remove indent of next line
+            endp = toplevel["token"]
+            while tokens[endp + 1][0] == TOK_WHITESPACE:
+                endp += 1
+            if tokens[endp + 1][0] == TOK_NEWLINE:
+                endp += 1
+            while tokens[endp + 1][0] == TOK_WHITESPACE:
+                endp += 1
+            for j in range(last_macro_start_token, endp + 1):
+                tokens[j] = (TOK_WHITESPACE, "")
             continue
         if toplevel["type"] == "MacroDefinitionStart":
+            last_macro_start_token = toplevel["start_token"]
             whiteout_node_and_line_from_tokens(toplevel, tokens)
-            inside_macro = True
             continue
         if toplevel["type"] != "Command":
             continue

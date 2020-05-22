@@ -1,3 +1,5 @@
+# encoding: utf-8
+
 import itertools
 import json
 import re
@@ -829,19 +831,39 @@ def handle_condition_short_circuiting(tokens):
 
 def extendedcaos_to_caos(s):
     tokens = lexcaos(s)
-    # this has to come first
+
+    # Move comments to own line first, so they stay before any additional lines
+    # that get added
     tokens = move_comments_to_own_line(tokens)
-    # and this absolutely must come second - other transformations make the
-    # assumption that commands on a previous line will execute first. ELIF is
-    # the one command that breaks that rule!
+
+    # Turn ELIF into ELSE/DOIF. This absolutely must come near the beginning - other
+    # transformations make the assumption that commands on a previous line will
+    # execute first. ELIF is the one command that breaks that rule!
+    # TODO: undo this transformation later on, if no other transformation has
+    # added anything in-between the ELSE and DOIF
     tokens = turn_elifs_into_elses(tokens)
+
+    # Handle condition short-circuiting by extracting boolean logic and doing
+    # it manually. This needs to come before macro expansion, explicit targs,
+    # or any other transformation that modify the condition; otherwise, the
+    # short-circuiting won't actually work
     tokens = handle_condition_short_circuiting(tokens)
+
+    # Transformations in no particular order
     tokens = expand_macros(tokens)
     tokens = explicit_targs(tokens)
     tokens = replace_constants(tokens)
+    tokens = expand_agentvariables(tokens)
+
+    # Explicit targ adds in a lot of cruft around saving targ and resetting
+    # targ. Try to remove the cruft when possible to make the end result
+    # easier to read and debug
     tokens = remove_extraneous_targ_saving(tokens)
     tokens = remove_double_targ(tokens)
-    tokens = expand_agentvariables(tokens)
+
+    # Turn namedvariables to vaxx variables. This must come after all transformations
+    # that add new variables (targ saving, macro arguments, condition short
+    # circuiting, etc.
     tokens = namedvariables_to_vaxx(tokens)
 
     return tokens_to_string(tokens)

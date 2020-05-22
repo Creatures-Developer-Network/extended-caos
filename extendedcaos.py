@@ -691,17 +691,17 @@ def turn_elifs_into_elses(tokens):
             # add new else, and change us to a doif
             indent = get_indentation_at(tokens, node["start_token"])
             insertions.append(
-                (node["start_token"], generate_snippet("else\n" + indent + "  "))
+                (node["start_token"], generate_snippet("else\n" + indent + "    "))
             )
             tokens[node["start_token"]] = (TOK_WORD, "doif")
             # indent everything
             for j in range(p + 1, endi_index):
-                insertions.append((nodes[j]["start_token"], generate_snippet("  ")))
+                insertions.append((nodes[j]["start_token"], generate_snippet("    ")))
             # add new endi
             insertions.append(
                 (
                     nodes[endi_index]["start_token"],
-                    generate_snippet("  endi\n" + indent),
+                    generate_snippet("    endi\n" + indent),
                 )
             )
             modified_tree = True
@@ -753,29 +753,29 @@ def handle_condition_short_circuiting(tokens):
                     "doif ",
                     tokens[startp : endp + 1],
                     "\n",
-                    "  setv {} 1\n".format(conditionvar),
+                    "    setv {} 1\n".format(conditionvar),
                     "endi\n",
                 ]
             elif combiner == "and":
                 # TODO: negate this condition instead of the weird empty doif body?
                 snippet_parts += [
                     "doif {} = 1\n".format(conditionvar),
-                    "  doif ",
+                    "    doif ",
                     tokens[startp : endp + 1],
                     "\n",
-                    "  else\n".format(conditionvar),
-                    "    setv {} 0\n".format(conditionvar),
-                    "  endi\n",
+                    "    else\n".format(conditionvar),
+                    "        setv {} 0\n".format(conditionvar),
+                    "    endi\n",
                     "endi\n",
                 ]
             elif combiner == "or":
                 snippet_parts += [
                     "doif {} = 0\n".format(conditionvar),
-                    "  doif ",
+                    "    doif ",
                     tokens[startp : endp + 1],
                     "\n",
-                    "    setv {} 1\n".format(conditionvar),
-                    "  endi\n",
+                    "        setv {} 1\n".format(conditionvar),
+                    "    endi\n",
                     "endi\n",
                 ]
             else:

@@ -209,15 +209,15 @@ class TestExtendedCAOS(unittest.TestCase):
             doif 0 < 1
             endi
         else
-          seta va00 targ
-          targ ownr
-          setv va01 posy
-          targ va00
-          doif posy > va01
-              dbg: outv 1
-          else
-              dbg: outv 2
-          endi
+            seta va00 targ
+            targ ownr
+            setv va01 posy
+            targ va00
+            doif posy > va01
+                dbg: outv 1
+            else
+                dbg: outv 2
+            endi
         endi
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
@@ -471,19 +471,19 @@ class TestExtendedCAOS(unittest.TestCase):
         doif 1 = 1
             dbg: outs "first branch"
         else
-          doif 2 = 3 or 4 = 5
-              dbg: outs "second branch"
-          else
-            doif 6 = 7 or 8 = 9
-                dbg: outs "third branch"
+            doif 2 = 3 or 4 = 5
+                dbg: outs "second branch"
             else
-              doif 10 = 11
-                  dbg: outs "fourth branch"
-              else
-                  dbg: outs "fifth branch"
-              endi
+                doif 6 = 7 or 8 = 9
+                    dbg: outs "third branch"
+                else
+                    doif 10 = 11
+                        dbg: outs "fourth branch"
+                    else
+                        dbg: outs "fifth branch"
+                    endi
+                endi
             endi
-          endi
         endi
         """
         self.assertMultiLineEqual(
@@ -501,22 +501,22 @@ class TestExtendedCAOS(unittest.TestCase):
         desired_output = """
         setv va00 0
         doif va01 = null
-          setv va00 1
+            setv va00 1
         endi
         doif va00 = 0
-          seta va02 targ
-          targ va01
-          setv va03 posy
-          targ va02
-          doif posy > va03
-            setv va00 1
-          endi
+            seta va02 targ
+            targ va01
+            setv va03 posy
+            targ va02
+            doif posy > va03
+                setv va00 1
+            endi
         endi
         doif va00 = 1
-          doif 1 eq 2
-          else
-            setv va00 0
-          endi
+            doif 1 eq 2
+            else
+                setv va00 0
+            endi
         endi
         doif va00 = 1
             dbg: outs "true"
@@ -538,16 +538,16 @@ class TestExtendedCAOS(unittest.TestCase):
         desired_output = """
         setv va00 0
         doif va01 = null
-          setv va00 1
+            setv va00 1
         endi
         doif va00 = 0
-          seta va02 targ
-          targ va01
-          setv va03 posy
-          targ va02
-          doif posy > va03
-            setv va00 1
-          endi
+            seta va02 targ
+            targ va01
+            setv va03 posy
+            targ va02
+            doif posy > va03
+                setv va00 1
+            endi
         endi
         doif va00 = 1
             dbg: outs "true"
@@ -566,16 +566,16 @@ class TestExtendedCAOS(unittest.TestCase):
             dbg: outs "hello world"
             setv va00 0
             doif va01 = null
-              setv va00 1
+                setv va00 1
             endi
             doif va00 = 0
-              seta va02 targ
-              targ va01
-              setv va03 posy
-              targ va02
-              doif posy > va03
-                setv va00 1
-              endi
+                seta va02 targ
+                targ va01
+                setv va03 posy
+                targ va02
+                doif posy > va03
+                    setv va00 1
+                endi
             endi
         untl va00 = 1
         """
@@ -587,16 +587,16 @@ class TestExtendedCAOS(unittest.TestCase):
         desired_output = """
         setv va00 0
         doif va01 = null
-          setv va00 1
+            setv va00 1
         endi
         doif va00 = 0
-          seta va02 targ
-          targ va01
-          setv va03 posy
-          targ va02
-          doif posy > va03
-            setv va00 1
-          endi
+            seta va02 targ
+            targ va01
+            setv va03 posy
+            targ va02
+            doif posy > va03
+                setv va00 1
+            endi
         endi
         dbg: asrt va00 = 1
         """

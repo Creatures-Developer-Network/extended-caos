@@ -69,10 +69,7 @@ macro CreateElevine parent
 endmacro
 
 macro TeleportCreature targetring creature
-	doif from = null
-		stop
-	endi
-	doif from.fmly <> 4
+	doif from = null or from.fmly <> 4
 		stop
 	endi
 	*So $targetring should be the ideal ring to tele to now

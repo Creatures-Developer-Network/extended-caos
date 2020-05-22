@@ -174,7 +174,7 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
                 ),
             )
         )
-        whiteout_node_from_tokens(node, tokens)
+        whiteout_node_and_line_from_tokens(node, tokens)
         tokens[node["start_token"]] = (TOK_WORD, value_variable)
         return insertions
 
@@ -193,7 +193,7 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
                     generate_save_result_to_variable(value_variable, node, tokens),
                 )
             )
-            whiteout_node_from_tokens(node, tokens)
+            whiteout_node_and_line_from_tokens(node, tokens)
             tokens[node["start_token"]] = (TOK_WORD, value_variable)
 
         return insertions
@@ -266,9 +266,7 @@ def explicit_targs(tokens):
                     ),
                 )
             )
-
-            for j in range(toplevel["start_token"], toplevel["end_token"] + 1):
-                tokens[j] = (TOK_WHITESPACE, "")
+            whiteout_node_from_tokens(toplevel, tokens)
 
     for insertion_point, toks in reversed(insertions):
         indent = get_indentation_at(tokens, insertion_point)
@@ -318,6 +316,13 @@ def remove_extraneous_targ_saving(tokens):
 
 
 def whiteout_node_from_tokens(node, tokens):
+    startp = node.get("start_token", node.get("token"))
+    endp = node.get("end_token", node.get("token"))
+    for j in range(startp, endp + 1):
+        tokens[j] = (TOK_WHITESPACE, "")
+
+
+def whiteout_node_and_line_from_tokens(node, tokens):
     startp = node.get("start_token", node.get("token"))
     endp = node.get("end_token", node.get("token"))
 
@@ -387,7 +392,7 @@ def remove_double_targ(tokens):
         ):
             continue
 
-        whiteout_node_from_tokens(second_targ, tokens)
+        whiteout_node_and_line_from_tokens(second_targ, tokens)
 
     return tokens
 
@@ -404,7 +409,7 @@ def expand_agentvariables(tokens):
             continue
         var_mapping[toplevel["name"]] = toplevel["value"]
 
-        whiteout_node_from_tokens(toplevel, tokens)
+        whiteout_node_and_line_from_tokens(toplevel, tokens)
 
     # do replacements
     insertions = []
@@ -430,7 +435,7 @@ def expand_agentvariables(tokens):
                         ),
                     )
                 )
-            whiteout_node_from_tokens(node, tokens)
+            whiteout_node_and_line_from_tokens(node, tokens)
         elif node.get("args"):
             for a in node["args"]:
                 visit(a)
@@ -510,7 +515,7 @@ def expand_macros(tokens):
                 tokens[node["body_start_token"] : node["body_end_token"] + 1],
             )
         )
-        whiteout_node_from_tokens(node, tokens)
+        whiteout_node_and_line_from_tokens(node, tokens)
 
     # fixup macros
     for i in range(len(macros)):
@@ -565,10 +570,7 @@ def expand_macros(tokens):
             insertions.append(
                 (insertion_point, generate_save_result_to_variable(argvar, a, tokens))
             )
-            for j in range(a["start_token"], a["end_token"] + 1):
-                tokens[j] = (TOK_WHITESPACE, "")
-        for j in range(toplevel["start_token"], toplevel["end_token"] + 1):
-            tokens[j] = (TOK_WHITESPACE, "")
+        whiteout_node_from_tokens(toplevel, tokens)
 
         indent = get_indentation_at(tokens, insertion_point)
         insertions.append(
@@ -595,7 +597,7 @@ def replace_constants(tokens):
 
     for toplevel in parsetree:
         if toplevel["type"] == "ConstantDefinition":
-            whiteout_node_from_tokens(toplevel, tokens)
+            whiteout_node_and_line_from_tokens(toplevel, tokens)
             constant_definitions[toplevel["name"]] = toplevel["values"]
 
     for i, t in enumerate(tokens):
@@ -689,7 +691,7 @@ def handle_condition_short_circuiting(tokens):
 
         insertions.append((node["start_token"], generate_snippet(*snippet_parts)))
 
-        whiteout_node_from_tokens(node, tokens)
+        whiteout_node_and_line_from_tokens(node, tokens)
 
     for node in parsetree:
         if node["type"] == "MacroDefinition":

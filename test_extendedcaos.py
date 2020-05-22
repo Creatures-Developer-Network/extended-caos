@@ -444,27 +444,27 @@ class TestExtendedCAOS(unittest.TestCase):
         endi
         """
         desired_output = """
-setv va00 0
-            doif va01 = null
-              setv va00 1
-            endi
-            doif va00 = 0
-              seta va02 targ
-              targ va01
-              setv va03 posy
-              targ va02
-              doif posy > va03
-                setv va00 1
-              endi
-            endi
-            doif va00 = 1
-              doif 1 eq 2
-              else
-                setv va00 0
-              endi
-            endi
-            doif va00 = 1
-                        dbg: outv "true"
+        setv va00 0
+        doif va01 = null
+          setv va00 1
+        endi
+        doif va00 = 0
+          seta va02 targ
+          targ va01
+          setv va03 posy
+          targ va02
+          doif posy > va03
+            setv va00 1
+          endi
+        endi
+        doif va00 = 1
+          doif 1 eq 2
+          else
+            setv va00 0
+          endi
+        endi
+        doif va00 = 1
+            dbg: outv "true"
         else
             dbg: outv "false"
         endi
@@ -482,21 +482,21 @@ setv va00 0
         """
         desired_output = """
                 setv va00 0
-                        doif va01 = null
-                          setv va00 1
-                        endi
-                        doif va00 = 0
-                          seta va02 targ
-                          targ va01
-                          setv va03 posy
-                          targ va02
-                          doif posy > va03
-                            setv va00 1
-                          endi
-                        endi
-                        doif va00 = 1
-                                        dbg: outs "true"
-                    endi
+        doif va01 = null
+          setv va00 1
+        endi
+        doif va00 = 0
+          seta va02 targ
+          targ va01
+          setv va03 posy
+          targ va02
+          doif posy > va03
+            setv va00 1
+          endi
+        endi
+        doif va00 = 1
+            dbg: outs "true"
+        endi
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 

@@ -687,11 +687,11 @@ def handle_condition_short_circuiting(tokens):
                 combiner = condition_args[i]["value"].lower()
                 i += 1
 
-        snippet_parts.append("doif {} = 1\n".format(conditionvar))
+        snippet_parts.append("doif {} = 1".format(conditionvar))
 
         insertions.append((node["start_token"], generate_snippet(*snippet_parts)))
 
-        whiteout_node_and_line_from_tokens(node, tokens)
+        whiteout_node_from_tokens(node, tokens)
 
     for node in parsetree:
         if node["type"] == "MacroDefinition":

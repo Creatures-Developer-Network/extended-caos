@@ -11,6 +11,7 @@ class ParserState:
         "commands",
         "command_namespaces",
         "constant_definitions",
+        "macro_definitions",
     ]
 
     def __init__(self, tokens, commands):
@@ -20,6 +21,7 @@ class ParserState:
             _.get("namespace") for _ in commands.values() if _.get("namespace")
         }
         self.constant_definitions = {}
+        self.macro_definitions = {}
         self.p = 0
 
     def peekmatch(self, newp, toktypes):
@@ -126,6 +128,43 @@ def parse_condition(state):
         return caoscondition([left, caosconditionkeyword(comparison), right], startp)
 
 
+def get_command_info(state, namespace, command_name, is_toplevel):
+    namespace = namespace.lower()
+    command_name = command_name.lower()
+
+    commandnormalized = command_name
+    if re.match(r"^va\d\d$", command_name):
+        commandnormalized = "vaxx"
+    if re.match(r"^ov\d\d$", command_name):
+        commandnormalized = "ovxx"
+    if re.match(r"^mv\d\d$", command_name):
+        commandnormalized = "mvxx"
+
+    for ci in state.commands.values():
+        if (
+            ci.get("namespace", "").lower() == namespace
+            and ci.get("match", "").lower() == commandnormalized
+            and (
+                (is_toplevel and ci.get("type") == "command")
+                or (not is_toplevel and ci.get("type") != "command")
+            )
+        ):
+            return ci
+
+    if is_toplevel and namespace == "" and commandnormalized in state.macro_definitions:
+        return {
+            "arguments": [
+                {"name": a, "type": "anything"}
+                for a in state.macro_definitions[commandnormalized]["argnames"]
+            ],
+            "type": "command",
+        }
+
+    raise Exception(
+        "Unknown command '%s'" % ((namespace + " " if namespace else "") + command)
+    )
+
+
 def parse_command(state, is_toplevel):
     startp = state.p
     dotcommand = False
@@ -170,27 +209,13 @@ def parse_command(state, is_toplevel):
     if re.match(r"(?i)^mv\d\d$", command):
         commandnormalized = "mvxx"
 
-    commandinfos = [
-        _
-        for _ in state.commands.values()
-        if _.get("namespace", "").lower() == namespace
-        and _.get("match", "").lower() == commandnormalized
-        and (
-            (is_toplevel and _.get("type") == "command")
-            or (not is_toplevel and _.get("type") != "command")
-        )
-    ]
-    if not commandinfos:
-        raise Exception(
-            "Unknown command '%s'" % ((namespace + " " if namespace else "") + command)
-        )
-    assert len(commandinfos) == 1
+    commandinfo = get_command_info(state, namespace, commandnormalized, is_toplevel)
     state.p += 1
 
     args = []
     num_args_parsed = 0
-    while num_args_parsed < len(commandinfos[0]["arguments"]):
-        _ = commandinfos[0]["arguments"][num_args_parsed]
+    while num_args_parsed < len(commandinfo["arguments"]):
+        _ = commandinfo["arguments"][num_args_parsed]
         eat_whitespace(state)
         if _["type"] == "condition":
             args.append(parse_condition(state))
@@ -216,7 +241,7 @@ def parse_command(state, is_toplevel):
             "targ": targ,
             "name": command,
             "commandtype": ("statement" if is_toplevel else "expression"),
-            "commandret": commandinfos[0]["type"],
+            "commandret": commandinfo["type"],
             "args": args,
             "start_token": startp,
             "end_token": end_token,
@@ -226,7 +251,7 @@ def parse_command(state, is_toplevel):
             "type": "Command",
             "name": (namespace + " " if namespace else "") + command,
             "commandtype": ("statement" if is_toplevel else "expression"),
-            "commandret": commandinfos[0]["type"],
+            "commandret": commandinfo["type"],
             "args": args,
             "start_token": startp,
             "end_token": end_token,
@@ -328,7 +353,74 @@ def parse_agent_variable(state):
     }
 
 
+def parse_macro_definition(state):
+    assert state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "macro"
+    startp = state.p
+    state.p += 1
+
+    eat_whitespace(state)
+    if not (state.tokens[state.p][0] == TOK_WORD):
+        raise Exception(
+            "Expected macro name after 'macro', got %r" % (state.tokens[state.p],)
+        )
+    macro_name = state.tokens[state.p][1].lower()
+    state.p += 1
+
+    argnames = []
+    while True:
+        if state.tokens[state.p][0] in (TOK_NEWLINE, TOK_EOI):
+            break
+        eat_whitespace(state)
+        if state.tokens[state.p][0] in (TOK_NEWLINE, TOK_EOI):
+            break
+        if state.tokens[state.p][0] != TOK_WORD:
+            raise Exception(
+                "Expected argument name in 'macro' definition, got %r"
+                % (state.tokens[state.p],)
+            )
+        argnames.append(state.tokens[state.p][1])
+        state.p += 1
+
+    state.p += 1
+    bodystartp = state.p
+    body = []
+
+    while True:
+        maybe_eat_whitespace_or_newline_or_comment(state)
+        if (
+            state.tokens[state.p][0] == TOK_WORD
+            and state.tokens[state.p][1] == "endmacro"
+        ):
+            break
+        body.append(parse_command(state, True))
+    bodyendp = state.p - 1
+    endp = state.p
+    state.p += 1
+    # line that 'endmacro' is on isn't part of the body
+    while state.tokens[bodyendp][0] == TOK_WHITESPACE:
+        bodyendp -= 1
+    if state.tokens[bodyendp][0] == TOK_NEWLINE:
+        bodyendp -= 1
+    while state.tokens[bodyendp][0] == TOK_WHITESPACE:
+        bodyendp -= 1
+
+    node = {
+        "type": "MacroDefinition",
+        "name": macro_name,
+        "argnames": argnames,
+        "start_token": startp,
+        "end_token": endp,
+        "body": body,
+        "body_start_token": bodystartp,
+        "body_end_token": bodyendp,
+    }
+    state.macro_definitions[macro_name] = node
+    return node
+
+
 def parse_toplevel(state):
+    if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "macro":
+        return parse_macro_definition(state)
     if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "constant":
         return parse_constant_definition(state)
     if (

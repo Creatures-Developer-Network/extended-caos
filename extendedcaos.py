@@ -492,75 +492,25 @@ def expand_macros(tokens):
 
     # collect macros
     macros = []
-    i = 0
-    while i < len(tokens):
-        if not (tokens[i][0] == TOK_WORD and tokens[i][1] == "macro"):
-            i += 1
+
+    for node in parse(tokens):
+        if not node["type"] == "MacroDefinition":
             continue
-        startp = i
-        i += 1
 
-        if tokens[i][0] != TOK_WHITESPACE:
-            raise Exception("Expected whitespace after 'macro', got %s %s" % tokens[i])
-        while tokens[i][0] == TOK_WHITESPACE:
-            i += 1
-
-        if tokens[i][0] != TOK_WORD:
-            raise Exception("Expected macro name got %s %s" % tokens[i])
-        macro_name = tokens[i][1]
-        i += 1
-
-        argnames = []
-
-        while True:
-            if tokens[i][0] in (TOK_NEWLINE, TOK_COMMENT):
-                i += 1
-                break
-            if tokens[i][0] != TOK_WHITESPACE:
+        for a in node["argnames"]:
+            if a[0] == "$":
                 raise Exception(
-                    "Expected whitespace, newline, or comment after macro arguments, got %s %s"
-                    % tokens[i]
+                    "Macro argument name mustn't start with '$', got %r" % a
                 )
-            while tokens[i][0] == TOK_WHITESPACE:
-                i += 1
-            if tokens[i][0] in (TOK_NEWLINE, TOK_COMMENT):
-                i += 1
-                break
-            if tokens[i][0] != TOK_WORD:
-                raise Exception("Expected argument name, got %s %s" % tokens[i])
-            if tokens[i][1][0] == "$":
-                raise Exception(
-                    "Macro argument names can't start with '$', got '%s'" % tokens[i][1]
-                )
-            argnames.append(tokens[i][1])
-            i += 1
 
-        bodypstart = i
-
-        while True:
-            if tokens[i][0] == TOK_EOI:
-                raise Exception("Got EOI while parsing macro")
-            if tokens[i][0] == TOK_WORD and tokens[i][1] == "endmacro":
-                break
-            i += 1
-
-        bodypend = i - 1
-        while tokens[bodypend][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            bodypend -= 1
-
-        while tokens[startp - 1][0] == TOK_WHITESPACE:
-            startp -= 1
-
-        endp = i
-        while tokens[endp + 1][0] == TOK_WHITESPACE:
-            endp += 1
-        if tokens[endp + 1][0] == TOK_NEWLINE:
-            endp += 1
-
-        macros.append((macro_name, argnames, tokens[bodypstart : bodypend + 1]))
-
-        for j in range(startp, endp + 1):
-            tokens[j] = (TOK_WHITESPACE, "")
+        macros.append(
+            (
+                node["name"],
+                node["argnames"],
+                tokens[node["body_start_token"] : node["body_end_token"] + 1],
+            )
+        )
+        whiteout_node_from_tokens(node, tokens)
 
     # fixup macros
     for i in range(len(macros)):

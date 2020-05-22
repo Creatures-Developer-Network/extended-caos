@@ -98,7 +98,20 @@ def parse_condition(state):
     startp = state.p
     comparison = state.tokens[state.p][1]
     state.p += 1
-    if comparison not in ("eq", "lt", "gt", "ne", "=", "<>", ">", ">=", "<", "<="):
+    if comparison not in (
+        "eq",
+        "ne",
+        "gt",
+        "ge",
+        "lt",
+        "le",
+        "=",
+        "<>",
+        ">",
+        ">=",
+        "<",
+        "<=",
+    ):
         raise Exception("Unknown comparison operator '%s'" % comparison)
 
     eat_whitespace(state)
@@ -447,11 +460,21 @@ def parse_value(state):
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
         return {"type": "LiteralInteger", "value": value, "token": startp}
+    elif state.tokens[state.p][0] == TOK_FLOAT:
+        value = state.tokens[state.p][1]
+        state.p += 1
+        state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
+        return {"type": "LiteralFloat", "value": value, "token": startp}
     elif state.tokens[state.p][0] == TOK_STRING:
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
         return {"type": "LiteralString", "value": value, "token": startp}
+    elif state.tokens[state.p][0] == TOK_BYTESTRING:
+        value = state.tokens[state.p][1]
+        state.p += 1
+        state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
+        return {"type": "LiteralBytestring", "value": value, "token": startp}
     else:
         raise Exception("Unimplemented token type %s" % state.tokens[state.p][0])
 

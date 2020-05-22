@@ -512,23 +512,42 @@ def expand_macros(tokens):
 
     # collect macros
     macros = []
-    for node in parse(tokens):
-        if not node["type"] == "MacroDefinition":
+    p = 0
+    nodes = parse(tokens)
+    while p < len(nodes):
+        if nodes[p]["type"] != "MacroDefinitionStart":
+            p += 1
             continue
 
-        for a in node["argnames"]:
+        start_node = nodes[p]
+        for a in nodes[p]["argnames"]:
             if a[0] == "$":
                 raise Exception(
                     "Macro argument name mustn't start with '$', got %r" % a
                 )
+        p += 1
 
+        while True:
+            if p >= len(tokens):
+                raise Exception("Didn't see 'endmacro'")
+            if nodes[p]["type"] == "MacroDefinitionEnd":
+                break
+            p += 1
+
+        end_node = nodes[p]
         macros.append(
             (
-                node["name"],
-                node["argnames"],
-                tokens[node["body_start_token"] : node["body_end_token"] + 1],
+                start_node["name"],
+                start_node["argnames"],
+                tokens[
+                    start_node["body_start_token"] : nodes[p - 1].get(
+                        "end_token", nodes[p - 1].get("token")
+                    )
+                    + 1
+                ],
             )
         )
+        p += 1
 
     # fixup macros
     for i in range(len(macros)):
@@ -553,9 +572,16 @@ def expand_macros(tokens):
     # parse and do expansions
     parsetree = parse(tokens)
     insertions = []
+    inside_macro = False
     for toplevel in parsetree:
-        if toplevel["type"] == "MacroDefinition":
+        if inside_macro:
+            if toplevel["type"] == "MacroDefinitionEnd":
+                inside_macro = False
             whiteout_node_and_line_from_tokens(toplevel, tokens)
+            continue
+        if toplevel["type"] == "MacroDefinitionStart":
+            whiteout_node_and_line_from_tokens(toplevel, tokens)
+            inside_macro = True
             continue
         if toplevel["type"] != "Command":
             continue
@@ -628,18 +654,18 @@ def handle_condition_short_circuiting(tokens):
     insertions = []
     parsetree = parse(tokens)
 
-    def visit(node):
+    for node in parsetree:
         if not (
             node["type"] == "Command"
             and len(node["args"]) == 1
             and node["args"][0]["type"] == "Condition"
         ):
-            return
+            continue
 
         condition_args = node["args"][0]["args"]
         needs_short_circuit = len(condition_args) > 3
         if not needs_short_circuit:
-            return
+            continue
 
         # this is the tricky part
         conditionvar = "$__condition_" + str(node["start_token"])
@@ -725,12 +751,6 @@ def handle_condition_short_circuiting(tokens):
         )
 
         whiteout_node_and_line_from_tokens(node, tokens)
-
-    for node in parsetree:
-        if node["type"] == "MacroDefinition":
-            for n in node["body"]:
-                visit(n)
-        visit(node)
 
     for insertion_point, toks in reversed(insertions):
         for t in reversed(toks):

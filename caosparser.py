@@ -381,38 +381,17 @@ def parse_macro_definition(state):
         argnames.append(state.tokens[state.p][1])
         state.p += 1
 
-    state.p += 1
-    bodystartp = state.p
-    body = []
-
-    while True:
-        maybe_eat_whitespace_or_newline_or_comment(state)
-        if (
-            state.tokens[state.p][0] == TOK_WORD
-            and state.tokens[state.p][1] == "endmacro"
-        ):
-            break
-        body.append(parse_command(state, True))
-    bodyendp = state.p - 1
     endp = state.p
     state.p += 1
-    # line that 'endmacro' is on isn't part of the body
-    while state.tokens[bodyendp][0] == TOK_WHITESPACE:
-        bodyendp -= 1
-    if state.tokens[bodyendp][0] == TOK_NEWLINE:
-        bodyendp -= 1
-    while state.tokens[bodyendp][0] == TOK_WHITESPACE:
-        bodyendp -= 1
+    bodystartp = state.p
 
     node = {
-        "type": "MacroDefinition",
+        "type": "MacroDefinitionStart",
         "name": macro_name,
         "argnames": argnames,
         "start_token": startp,
         "end_token": endp,
-        "body": body,
         "body_start_token": bodystartp,
-        "body_end_token": bodyendp,
     }
     state.macro_definitions[macro_name] = node
     return node
@@ -421,6 +400,15 @@ def parse_macro_definition(state):
 def parse_toplevel(state):
     if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "macro":
         return parse_macro_definition(state)
+    elif (
+        state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "endmacro"
+    ):
+        node = {
+            "type": "MacroDefinitionEnd",
+            "token": state.p,
+        }
+        state.p += 1
+        return node
     if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "constant":
         return parse_constant_definition(state)
     if (

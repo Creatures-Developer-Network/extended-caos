@@ -471,6 +471,35 @@ setv va00 0
         """
         self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
+    def test_short_circuit_within_macros(self):
+        input = """
+        macro MyMacro
+            doif $parent = null or posy > $parent.posy
+                dbg: outs "true"
+            endi
+        endmacro
+        MyMacro
+        """
+        desired_output = """
+                setv va00 0
+                        doif va01 = null
+                          setv va00 1
+                        endi
+                        doif va00 = 0
+                          seta va02 targ
+                          targ va01
+                          setv va03 posy
+                          targ va02
+                          doif posy > va03
+                            setv va00 1
+                          endi
+                        endi
+                        doif va00 = 1
+                                        dbg: outs "true"
+                    endi
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
 
 if __name__ == "__main__":
     unittest.main()

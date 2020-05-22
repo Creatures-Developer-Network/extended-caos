@@ -621,9 +621,10 @@ def handle_condition_short_circuiting(tokens):
 
     insertions = []
     parsetree = parse(tokens)
-    for node in parsetree:
+
+    def visit(node):
         if not (node["type"] == "Command" and node["name"].lower() == "doif"):
-            continue
+            return
 
         assert len(node["args"]) == 1
         assert node["args"][0]["type"] == "Condition"
@@ -631,7 +632,7 @@ def handle_condition_short_circuiting(tokens):
         condition_args = node["args"][0]["args"]
         needs_short_circuit = len(condition_args) > 3
         if not needs_short_circuit:
-            continue
+            return
 
         # this is the tricky part
         conditionvar = "$__condition_" + str(node["start_token"])
@@ -690,21 +691,11 @@ def handle_condition_short_circuiting(tokens):
 
         whiteout_node_from_tokens(node, tokens)
 
-        # print(tokens_to_string(generate_snippet(*snippet_parts)))
-
-        #
-        # insertions.append(
-        #     (node["start_token"], generate_snippet(
-        #
-        #     "setv {} 0\n".format(conditionvar)
-        #
-        #
-        #
-        # ))
-        # )
-
-        # print(node)
-        # print(needs_manual_short_circuit)
+    for node in parsetree:
+        if node["type"] == "MacroDefinition":
+            for n in node["body"]:
+                visit(n)
+        visit(node)
 
     for insertion_point, toks in reversed(insertions):
         indent = get_indentation_at(tokens, insertion_point)
@@ -720,12 +711,9 @@ def extendedcaos_to_caos(s):
     tokens = lexcaos(s)
     # this has to come first
     tokens = move_comments_to_own_line(tokens)
-    # TODO: teach parser about macros, so this doesn't have to happen before parsing
+    tokens = handle_condition_short_circuiting(tokens)
     tokens = expand_macros(tokens)
-    tokens = handle_condition_short_circuiting(
-        tokens
-    )  # TODO: move above macro expansion
-    tokens = explicit_targs(tokens)  # TODO: make this ignore conditions?
+    tokens = explicit_targs(tokens)
     tokens = replace_constants(tokens)
     tokens = remove_extraneous_targ_saving(tokens)
     tokens = remove_double_targ(tokens)

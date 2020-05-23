@@ -697,35 +697,58 @@ def expand_macros(tokens, parsetree):
         whiteout_node_and_line(tokens, parsetree, node_index)
 
 
-def replace_constants(tokens):
-    tokens = tokens[:]
-    parsetree = parse(tokens)
-
-    insertions = []
+def replace_constants(tokens, parsetree):
 
     constant_definitions = {}  # TODO: expose from parse(tokens)
-
-    for toplevel in parsetree:
+    node_index = 0
+    while node_index < len(parsetree):
+        toplevel = parsetree[node_index]
         if toplevel["type"] == "ConstantDefinition":
-            whiteout_node_and_line_from_tokens(toplevel, tokens)
+            whiteout_node_and_line(tokens, parsetree, node_index)
             constant_definitions[toplevel["name"]] = toplevel["values"]
-
-    for i, t in enumerate(tokens):
-        if not (t[0] == TOK_WORD and t[1][0] == ":"):
             continue
-        values = []
-        for v in constant_definitions[t[1]]:
-            if values:
-                values.append((TOK_WHITESPACE, " "))
-            values.append(v)
-        insertions.append((i, values))
-        tokens[i] = (TOK_WHITESPACE, "")
 
-    for insertion_point, toks in reversed(insertions):
-        for t in reversed(toks):
-            tokens.insert(insertion_point, t)
+        insertions = []
+        for i, t in enumerate(
+            tokens[toplevel["start_token"] : toplevel["end_token"] + 1]
+        ):
+            if not (t[0] == TOK_WORD and t[1][0] == ":"):
+                continue
+            values = []
+            for v in constant_definitions[t[1]]:
+                if values:
+                    values.append((TOK_WHITESPACE, " "))
+                values.append(v)
+            insertions.append((i, values))
+            tokens[toplevel["start_token"] + i] = (TOK_WHITESPACE, "")
 
-    return tokens
+        if insertions:
+            for insertion_point, toks in reversed(insertions):
+                for t in reversed(toks):
+                    tokens.insert(insertion_point + toplevel["start_token"], t)
+
+            num_tokens_inserted = sum(len(_[1]) for _ in insertions)
+            add_token_offset_to_nodes(parsetree[node_index + 1 :], num_tokens_inserted)
+
+            reparsednodes = parse(
+                tokens[
+                    toplevel["start_token"] : toplevel["end_token"]
+                    + num_tokens_inserted
+                    + 1
+                ]
+                + [(TOK_EOI, "")]
+            )
+            add_token_offset_to_nodes(reparsednodes, toplevel["start_token"])
+            assert len(reparsednodes) == 1
+            parsetree[node_index] = reparsednodes[0]
+
+        node_index += 1
+
+
+def add_token_offset_to_nodes(nodes, offset):
+    for n in nodes:
+        n["start_token"] += offset
+        n["end_token"] += offset
 
 
 def insert_before_node(tokens, nodes, node_index, snippet):
@@ -736,16 +759,11 @@ def insert_before_node(tokens, nodes, node_index, snippet):
     for i, x in enumerate(snippet):
         tokens.insert(insertion_point + i, x)
     offset = len(snippet)
-    # TODO: fix token offsets on child nodes? it's much slower
-    # add_token_offset_to_nodes(nodes[node_index:], offset)
-    for n in nodes[node_index:]:
-        n["start_token"] += offset
-        n["end_token"] += offset
+    add_token_offset_to_nodes(nodes[node_index:], offset)
 
     parsedsnippet = parse(snippet + [(TOK_EOI, "")])
+    add_token_offset_to_nodes(parsedsnippet, insertion_point)
     for i, x in enumerate(parsedsnippet):
-        x["start_token"] += insertion_point
-        x["end_token"] += insertion_point
         nodes.insert(node_index + i, x)
 
     return node_index + len(parsedsnippet)
@@ -913,7 +931,7 @@ def extendedcaos_to_caos(s):
     # Transformations in no particular order
     expand_macros(tokens, parsetree)
     explicit_targs(tokens, parsetree)
-    tokens = replace_constants(tokens)
+    replace_constants(tokens, parsetree)
     tokens = expand_agentvariables(tokens)
 
     # Explicit targ adds in a lot of cruft around saving targ and resetting

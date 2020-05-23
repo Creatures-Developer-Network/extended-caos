@@ -151,13 +151,17 @@ def get_indentation_at_previous_line(tokens, i):
         return get_indentation_at(tokens, i)
 
 
-def node_to_string(original_node):
+def nodes_to_string(nodes):
     parts = []
 
     def visit(n):
         type = n["type"]
-        if type in ("Command", "Condition", "DotCommand"):
+        if type in ("Command", "Condition"):
             parts.append(n["name"])
+            for a in n["args"]:
+                visit(a)
+        elif type in ("DotCommand",):
+            parts.append(n["targ"] + "." + n["name"])
             for a in n["args"]:
                 visit(a)
         elif type in (
@@ -166,13 +170,19 @@ def node_to_string(original_node):
             "LiteralInteger",
             "LiteralFloat",
             "LiteralBytestring",
+            "ConditionKeyword",
         ):
             parts.append(n["value"])
         else:
             raise Exception("Unimplemented node type %r" % n)
 
-    visit(original_node)
+    for n in nodes:
+        visit(n)
     return " ".join(parts)
+
+
+def node_to_string(node):
+    return nodes_to_string([node])
 
 
 def generate_save_result_to_variable(variable_name, node):
@@ -793,16 +803,11 @@ def handle_condition_short_circuiting(tokens):
         i = 0
         combiner = None
         while i < len(condition_args):
-            startp = condition_args[i].get(
-                "start_token", condition_args[i].get("token")
-            )
-            endp = condition_args[i + 2].get(
-                "end_token", condition_args[i + 2].get("token")
-            )
+            value = nodes_to_string(condition_args[i : i + 3])
             if combiner is None:
                 snippet_parts += [
                     "doif ",
-                    tokens[startp : endp + 1],
+                    value,
                     "\n",
                     "    setv {} 1\n".format(conditionvar),
                     "endi\n",
@@ -812,7 +817,7 @@ def handle_condition_short_circuiting(tokens):
                 snippet_parts += [
                     "doif {} = 1\n".format(conditionvar),
                     "    doif ",
-                    tokens[startp : endp + 1],
+                    value,
                     "\n",
                     "    else\n".format(conditionvar),
                     "        setv {} 0\n".format(conditionvar),
@@ -823,7 +828,7 @@ def handle_condition_short_circuiting(tokens):
                 snippet_parts += [
                     "doif {} = 0\n".format(conditionvar),
                     "    doif ",
-                    tokens[startp : endp + 1],
+                    value,
                     "\n",
                     "        setv {} 1\n".format(conditionvar),
                     "    endi\n",

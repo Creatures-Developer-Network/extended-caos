@@ -30,7 +30,7 @@ class ParserState:
 
 
 def caoscondition(args, start_token):
-    end_token = args[-1].get("end_token") or args[-1].get("token")
+    end_token = args[-1].get("end_token")
     return {
         "type": "Condition",
         "args": args,
@@ -226,9 +226,7 @@ def parse_command(state, is_toplevel):
         elif _["type"] == "label":
             if state.tokens[state.p][0] != TOK_WORD:
                 raise Exception("Expected label, got %s '%s'\n" % (t[0], t[1]))
-            args.append(
-                {"type": "Label", "value": state.tokens[state.p][1], "token": state.p}
-            )
+            args.append({"type": "Label", "value": state.tokens[state.p][1]})
             state.p += 1
         else:
             args.append(parse_value(state))
@@ -409,7 +407,8 @@ def parse_toplevel(state):
     ):
         node = {
             "type": "MacroDefinitionEnd",
-            "token": state.p,
+            "start_token": state.p,
+            "end_token": state.p,
         }
         state.p += 1
         return node
@@ -444,28 +443,28 @@ def parse_value(state):
             state.peekmatch(
                 state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE)
             )
-            return {"type": "Variable", "value": value, "token": startp}
+            return {"type": "Variable", "value": value}
         return parse_command(state, False)
     elif state.tokens[state.p][0] in (TOK_INTEGER, TOK_CHARACTER, TOK_BINARY_LITERAL):
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
-        return {"type": "LiteralInteger", "value": value, "token": startp}
+        return {"type": "LiteralInteger", "value": value}
     elif state.tokens[state.p][0] == TOK_FLOAT:
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
-        return {"type": "LiteralFloat", "value": value, "token": startp}
+        return {"type": "LiteralFloat", "value": value}
     elif state.tokens[state.p][0] == TOK_STRING:
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
-        return {"type": "LiteralString", "value": value, "token": startp}
+        return {"type": "LiteralString", "value": value}
     elif state.tokens[state.p][0] == TOK_BYTESTRING:
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))
-        return {"type": "LiteralBytestring", "value": value, "token": startp}
+        return {"type": "LiteralBytestring", "value": value}
     else:
         raise Exception("Unimplemented token type %s" % state.tokens[state.p][0])
 

@@ -415,15 +415,15 @@ def remove_extraneous_targ_saving(tokens):
 
 
 def whiteout_node_from_tokens(node, tokens):
-    startp = node.get("start_token", node.get("token"))
-    endp = node.get("end_token", node.get("token"))
+    startp = node["start_token"]
+    endp = node["end_token"]
     for j in range(startp, endp + 1):
         tokens[j] = (TOK_WHITESPACE, "")
 
 
 def whiteout_node_and_line_from_tokens(node, tokens):
-    startp = node.get("start_token", node.get("token"))
-    endp = node.get("end_token", node.get("token"))
+    startp = node["start_token"]
+    endp = node["end_token"]
 
     newstartp = startp
     while newstartp > 0 and tokens[newstartp - 1][0] == TOK_WHITESPACE:
@@ -607,12 +607,7 @@ def expand_macros(tokens):
             (
                 start_node["name"],
                 start_node["argnames"],
-                tokens[
-                    start_node["body_start_token"] : nodes[p - 1].get(
-                        "end_token", nodes[p - 1].get("token")
-                    )
-                    + 1
-                ],
+                tokens[start_node["body_start_token"] : nodes[p - 1]["end_token"] + 1],
             )
         )
         p += 1
@@ -644,7 +639,7 @@ def expand_macros(tokens):
     for toplevel in parsetree:
         if toplevel["type"] == "MacroDefinitionEnd":
             # need to remove indent of next line
-            endp = toplevel["token"]
+            endp = toplevel["end_token"]
             while tokens[endp + 1][0] == TOK_WHITESPACE:
                 endp += 1
             if tokens[endp + 1][0] == TOK_NEWLINE:

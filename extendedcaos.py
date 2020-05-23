@@ -261,7 +261,7 @@ def get_doif_for(parsetree, p):
 
 def get_endi_index_for(parsetree, p):
     assert parsetree[p]["type"] == "Command"
-    assert parsetree[p]["name"] == "elif"
+    assert parsetree[p]["name"] in ("doif", "elif")
 
     nesting = 0
 
@@ -685,41 +685,58 @@ def replace_constants(tokens):
 
 
 def turn_elifs_into_elses(tokens):
+
     tokens = tokens[:]
-    while True:
-        nodes = parse(tokens)
-        insertions = []
-        modified_tree = False
-        for p, node in enumerate(nodes):
-            if not (node["type"] == "Command" and node["name"] == "elif"):
-                continue
 
-            # tricky — find everything until the matching endi
-            endi_index = get_endi_index_for(nodes, p)
+    nodes = parse(tokens)
 
-            # add new else, and change us to a doif
-            indent = get_indentation_at(tokens, node["start_token"])
-            insertions.append(
-                (node["start_token"], generate_snippet("else\n" + indent + "    "))
-            )
-            tokens[node["start_token"]] = (TOK_WORD, "doif")
-            # indent everything
-            for j in range(p + 1, endi_index):
-                insertions.append((nodes[j]["start_token"], generate_snippet("    ")))
-            # add new endi
-            insertions.append(
-                (
-                    nodes[endi_index]["start_token"],
-                    generate_snippet("    endi\n" + indent),
-                )
-            )
-            modified_tree = True
-            break
-        if not modified_tree:
-            break
-        for insertion_point, toks in reversed(insertions):
-            for t in reversed(toks):
-                tokens.insert(insertion_point, t)
+    def insert_before_node(node_index, snippet):
+        insertion_point = nodes[node_index]["start_token"]
+        for i, x in enumerate(snippet):
+            tokens.insert(insertion_point + i, x)
+        offset = len(snippet)
+        # TODO: fix token offsets on child nodes? it's much slower
+        for n in nodes[node_index:]:
+            n["start_token"] += offset
+            n["end_token"] += offset
+
+        parsedsnippet = parse(snippet + [(TOK_EOI, "")])
+        for i, x in enumerate(parsedsnippet):
+            x["start_token"] += insertion_point
+            x["end_token"] += insertion_point
+            nodes.insert(node_index + i, x)
+
+    modified_tree = False
+    p = 0
+    while p < len(nodes):
+        node = nodes[p]
+        if not (node["type"] == "Command" and node["name"] == "elif"):
+            p += 1
+            continue
+
+        # add new else before us
+        indent = get_indentation_at(tokens, node["start_token"])
+        insert_before_node(p, generate_snippet("else\n" + indent + "    "))
+        p += 1
+
+        # change us to a doif
+        tokens[node["start_token"]] = (TOK_WORD, "doif")
+        node["name"] = "doif"
+
+        # find everything until the matching endi
+        endi_index = get_endi_index_for(nodes, p)
+
+        # indent everything up to next endi
+        for j in range(p + 1, endi_index):
+            insert_before_node(j, generate_snippet("    "))
+
+        # add new endi
+        snippet = generate_snippet("    endi\n" + indent)
+        insert_before_node(endi_index, snippet)
+
+        # not necessary, as we're now a DOIF and will be skipped on next iteration,
+        # but good practice
+        p += 1
 
     return tokens
 

@@ -371,6 +371,7 @@ def parse_macro_definition(state):
             "Expected macro name after 'macro', got %r" % (state.tokens[state.p],)
         )
     macro_name = state.tokens[state.p][1].lower()
+    endp = state.p
     state.p += 1
 
     argnames = []
@@ -386,9 +387,9 @@ def parse_macro_definition(state):
                 % (state.tokens[state.p],)
             )
         argnames.append(state.tokens[state.p][1])
+        endp = state.p
         state.p += 1
 
-    endp = state.p
     state.p += 1
     bodystartp = state.p
 

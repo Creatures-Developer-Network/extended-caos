@@ -580,9 +580,9 @@ def add_indent(tokens, indent):
     newtokens = [(TOK_WHITESPACE, indent)]
 
     # TODO: add to existing whitespace tokens, if they exist
-    for t in tokens:
+    for i, t in enumerate(tokens):
         newtokens.append(t)
-        if t[0] == TOK_NEWLINE:
+        if t[0] == TOK_NEWLINE and i + 1 != len(tokens):
             newtokens.append((TOK_WHITESPACE, indent))
 
     return newtokens
@@ -649,48 +649,58 @@ def expand_macros(tokens):
     parsetree = parse(tokens)
     insertions = []
     last_macro_start_token = None
-    for toplevel in parsetree:
+    node_index = 0
+    while node_index < len(parsetree):
+        toplevel = parsetree[node_index]
         if toplevel["type"] == "MacroDefinitionEnd":
-            # need to remove indent of next line
             endp = toplevel["end_token"]
             while tokens[endp + 1][0] == TOK_WHITESPACE:
                 endp += 1
             if tokens[endp + 1][0] == TOK_NEWLINE:
                 endp += 1
-            while tokens[endp + 1][0] == TOK_WHITESPACE:
-                endp += 1
             for j in range(last_macro_start_token, endp + 1):
                 tokens[j] = (TOK_WHITESPACE, "")
+            node_index += 1
             continue
         if toplevel["type"] == "MacroDefinitionStart":
             last_macro_start_token = toplevel["start_token"]
             whiteout_node_and_line_from_tokens(toplevel, tokens)
+            node_index += 1
             continue
         if toplevel["type"] != "Command":
+            node_index += 1
             continue
         if toplevel["name"].lower() not in macros_by_name:
+            node_index += 1
             continue
 
         insertion_point = toplevel["start_token"]
+        indent = get_indentation_at(tokens, toplevel["start_token"])
+        whiteout_node_and_line_from_tokens(toplevel, tokens)
+
         argvars = []
         argnames = macros_by_name[toplevel["name"].lower()][0]
         for i, a in enumerate(toplevel["args"]):
             argvar = argnames[i]
 
             insertions.append(
-                (insertion_point, generate_save_result_to_variable(argvar, a))
+                (
+                    insertion_point,
+                    add_indent(generate_save_result_to_variable(argvar, a), indent),
+                )
             )
-        whiteout_node_from_tokens(toplevel, tokens)
 
         insertions.append(
-            (insertion_point, macros_by_name[toplevel["name"].lower()][1],)
+            (
+                insertion_point,
+                add_indent(macros_by_name[toplevel["name"].lower()][1], indent)
+                + [(TOK_NEWLINE, "\n")],
+            )
         )
+        node_index += 1
 
     for insertion_point, toks in reversed(insertions):
-        indent = get_indentation_at(tokens, insertion_point)
         for t in reversed(toks):
-            if t[0] == TOK_NEWLINE:
-                tokens.insert(insertion_point, (TOK_WHITESPACE, indent))
             tokens.insert(insertion_point, t)
 
     return tokens

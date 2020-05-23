@@ -332,6 +332,29 @@ class TestExtendedCAOS(unittest.TestCase):
 
     def test_macros_toplevel(self):
         input = """
+        macro SimpleMacro
+            dbg: outs "inside macro"
+        endmacro
+        SimpleMacro
+        """
+        desired_output = """
+        dbg: outs "inside macro"
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+        input = """
+        macro SimpleMacroWithArg target
+            dbg: outs "inside macro"
+        endmacro
+        SimpleMacroWithArg 1
+        """
+        desired_output = """
+        setv va00 1
+        dbg: outs "inside macro"
+        """
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
+
+        input = """
         macro CreateMyAgent sprite_name
             sets $sprite_name lowa $sprite_name
             new: simp 1 2 1001 $sprite_name 13 4 2000

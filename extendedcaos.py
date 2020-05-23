@@ -281,63 +281,42 @@ def generate_snippet(*args):
     return lexcaos(snippet)[:-1]
 
 
-def explicit_targs(tokens):
-    tokens = tokens[:]
-    parsetree = parse(tokens)
-
-    def visit(node, toplevel_node_index, in_dotcommand):
+def explicit_targs(tokens, parsetree):
+    def visit(node, in_dotcommand):
         if node["type"] == "DotCommand" or (
             node["type"] in ("Command", "Condition") and in_dotcommand
         ):
             insertions = []
             for a in node["args"]:
-                insertions += visit(a, toplevel_node_index, True)
+                insertions += visit(a, True)
 
-            startp = (
-                node["start_token_in_parent"]
-                + parsetree[toplevel_node_index]["start_token"]
-            )
+            startp = node["start_token_in_parent"] + toplevel["start_token"]
             value_variable = "$__{}_{}__t{}".format(
                 node.get("targ", "").lstrip("$"), node["name"], startp
             )
-
-            insertion_point = parsetree[toplevel_node_index]["start_token"]
-            while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
-                insertion_point -= 1
 
             indent = get_indentation_at(tokens, toplevel["start_token"])
             if node["type"] == "DotCommand":
                 newnode = dict(node)
                 newnode.update({"type": "Command"})
                 insertions.append(
-                    (
-                        insertion_point,
-                        add_indent(
-                            generate_snippet(
-                                "seta $__saved_targ targ\n",
-                                "targ {}\n".format(node["targ"]),
-                                generate_save_result_to_variable(
-                                    value_variable, newnode
-                                ),
-                                "targ $__saved_targ\n",
-                            ),
-                            indent,
+                    add_indent(
+                        generate_snippet(
+                            "seta $__saved_targ targ\n",
+                            "targ {}\n".format(node["targ"]),
+                            generate_save_result_to_variable(value_variable, newnode),
+                            "targ $__saved_targ\n",
                         ),
+                        indent,
                     )
                 )
             else:
                 insertions.append(
-                    (
-                        insertion_point,
-                        add_indent(
-                            generate_save_result_to_variable(value_variable, node),
-                            indent,
-                        ),
+                    add_indent(
+                        generate_save_result_to_variable(value_variable, node), indent,
                     )
                 )
-            whiteout_child_node_from_tokens(
-                parsetree[toplevel_node_index], node, tokens
-            )
+            whiteout_child_node_from_tokens(toplevel, node, tokens)
             tokens[startp] = (TOK_WORD, value_variable)
             node.clear()
             node.update(
@@ -348,12 +327,11 @@ def explicit_targs(tokens):
         elif node.get("type", "") in ("Command", "Condition"):
             insertions = []
             for a in node["args"]:
-                insertions += visit(a, toplevel_node_index, in_dotcommand)
+                insertions += visit(a, in_dotcommand)
             return insertions
         else:
             return []
 
-    insertions = []
     node_index = 0
     while node_index < len(parsetree):
         toplevel = parsetree[node_index]
@@ -363,44 +341,37 @@ def explicit_targs(tokens):
 
         insertion_point = toplevel["start_token"]
         if toplevel["type"] == "Command" and toplevel["name"] == "elif":
-            # uh-oh. this shouldn't ever have any insertions since we've converted elifs into elses/doifs, but saving variables/results can generate new elifs.
-            # matching_doif = get_doif_for(parsetree, node_index)
-            # insertion_point = matching_doif["start_token"]
-            pass
+            raise Exception("Can't handle ELIF commands")
 
         while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
             insertion_point -= 1
 
+        insertions = []
         for a in toplevel["args"]:
-            insertions += visit(a, node_index, toplevel["type"] == "DotCommand")
+            insertions += visit(a, toplevel["type"] == "DotCommand")
+
+        for snippet in insertions:
+            node_index = insert_before_node(tokens, parsetree, node_index, snippet)
 
         if toplevel["type"] == "DotCommand":
             indent = get_indentation_at(tokens, toplevel["start_token"])
-            insertions.append(
-                (
-                    insertion_point,
-                    add_indent(
-                        generate_snippet(
-                            "seta $__saved_targ targ\n",
-                            "targ {}\n".format(toplevel["targ"]),
-                            tokens[
-                                toplevel["start_token"] + 2 : toplevel["end_token"] + 1
-                            ],
-                            "\ntarg $__saved_targ\n",
-                        ),
-                        indent,
+            node_index = insert_before_node(
+                tokens,
+                parsetree,
+                node_index,
+                add_indent(
+                    generate_snippet(
+                        "seta $__saved_targ targ\n",
+                        "targ {}\n".format(toplevel["targ"]),
+                        tokens[toplevel["start_token"] + 2 : toplevel["end_token"] + 1],
+                        "\ntarg $__saved_targ\n",
                     ),
-                )
+                    indent,
+                ),
             )
             whiteout_node_and_line_from_tokens(toplevel, tokens)
 
         node_index += 1
-
-    for insertion_point, toks in reversed(insertions):
-        for t in reversed(toks):
-            tokens.insert(insertion_point, t)
-
-    return tokens
 
 
 def remove_extraneous_targ_saving(tokens):
@@ -941,7 +912,7 @@ def extendedcaos_to_caos(s):
 
     # Transformations in no particular order
     expand_macros(tokens, parsetree)
-    tokens = explicit_targs(tokens)
+    explicit_targs(tokens, parsetree)
     tokens = replace_constants(tokens)
     tokens = expand_agentvariables(tokens)
 

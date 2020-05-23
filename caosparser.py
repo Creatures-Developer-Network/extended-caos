@@ -29,13 +29,10 @@ class ParserState:
             raise Exception("Expected %r, got %s\n" % (toktypes, self.tokens[newp][0]))
 
 
-def caoscondition(args, start_token):
-    end_token = args[-1].get("end_token")
+def caoscondition(args):
     return {
         "type": "Condition",
         "args": args,
-        "start_token": start_token,
-        "end_token": end_token,
     }
 
 
@@ -133,10 +130,9 @@ def parse_condition(state):
                 caosconditionkeyword(combiner),
             ]
             + remainder["args"],
-            startp,
         )
     else:
-        return caoscondition([left, caosconditionkeyword(comparison), right], startp)
+        return caoscondition([left, caosconditionkeyword(comparison), right])
 
 
 def get_command_info(state, namespace, command_name, is_toplevel):

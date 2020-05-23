@@ -276,31 +276,59 @@ def explicit_targs(tokens):
     tokens = tokens[:]
     parsetree = parse(tokens)
 
-    def visit(node, toplevel_node, statement_start, in_dotcommand):
-        if node.get("type", "") == "DotCommand":
-            startp = node["start_token_in_parent"] + toplevel_node["start_token"]
+    def visit(node, toplevel_node_index, in_dotcommand):
+        if node["type"] == "DotCommand" or (
+            node["type"] in ("Command", "Condition") and in_dotcommand
+        ):
             insertions = []
             for a in node["args"]:
-                insertions += visit(a, toplevel_node, statement_start, True)
+                insertions += visit(a, toplevel_node_index, True)
 
+            startp = (
+                node["start_token_in_parent"]
+                + parsetree[toplevel_node_index]["start_token"]
+            )
             value_variable = "$__{}_{}__t{}".format(
-                node["targ"].lstrip("$"), node["name"], startp
+                node.get("targ", "").lstrip("$"), node["name"], startp
             )
 
-            newnode = dict(node)
-            newnode.update({"type": "Command"})
-            insertions.append(
-                (
-                    statement_start,
-                    generate_snippet(
-                        "seta $__saved_targ targ\n",
-                        "targ {}\n".format(node["targ"]),
-                        generate_save_result_to_variable(value_variable, newnode),
-                        "targ $__saved_targ\n",
-                    ),
+            insertion_point = parsetree[toplevel_node_index]["start_token"]
+            while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
+                insertion_point -= 1
+
+            indent = get_indentation_at(tokens, toplevel["start_token"])
+            if node["type"] == "DotCommand":
+                newnode = dict(node)
+                newnode.update({"type": "Command"})
+                insertions.append(
+                    (
+                        insertion_point,
+                        add_indent(
+                            generate_snippet(
+                                "seta $__saved_targ targ\n",
+                                "targ {}\n".format(node["targ"]),
+                                generate_save_result_to_variable(
+                                    value_variable, newnode
+                                ),
+                                "targ $__saved_targ\n",
+                            ),
+                            indent,
+                        ),
+                    )
                 )
+            else:
+                insertions.append(
+                    (
+                        insertion_point,
+                        add_indent(
+                            generate_save_result_to_variable(value_variable, node),
+                            indent,
+                        ),
+                    )
+                )
+            whiteout_child_node_from_tokens(
+                parsetree[toplevel_node_index], node, tokens
             )
-            whiteout_child_node_from_tokens(toplevel_node, node, tokens)
             tokens[startp] = (TOK_WORD, value_variable)
             node.clear()
             node.update(
@@ -311,66 +339,56 @@ def explicit_targs(tokens):
         elif node.get("type", "") in ("Command", "Condition"):
             insertions = []
             for a in node["args"]:
-                insertions += visit(a, toplevel_node, statement_start, in_dotcommand)
-
-            if in_dotcommand:
-                startp = node["start_token_in_parent"] + toplevel_node["start_token"]
-                value_variable = "$__targ_{}__t{}".format(node["name"], startp)
-                insertions.append(
-                    (
-                        statement_start,
-                        generate_save_result_to_variable(value_variable, node),
-                    )
-                )
-                whiteout_child_node_from_tokens(toplevel_node, node, tokens)
-                tokens[startp] = (TOK_WORD, value_variable)
-                node.clear()
-                node.update(
-                    {"type": "Variable", "value": value_variable,}
-                )
-
+                insertions += visit(a, toplevel_node_index, in_dotcommand)
             return insertions
         else:
             return []
 
     insertions = []
-    for i, toplevel in enumerate(parsetree):
+    node_index = 0
+    while node_index < len(parsetree):
+        toplevel = parsetree[node_index]
         if toplevel["type"] not in ("Command", "Condition", "DotCommand"):
+            node_index += 1
             continue
 
         insertion_point = toplevel["start_token"]
         if toplevel["type"] == "Command" and toplevel["name"] == "elif":
-            # uh-oh. go find last doif. this shouldn't ever have any insertions
-            # since we've converted elifs into elses/doifs, but keep this just in
-            # case. saving variables/results can generate new elifs.
-            matching_doif = get_doif_for(parsetree, i)
-            insertion_point = matching_doif["start_token"]
+            # uh-oh. this shouldn't ever have any insertions since we've converted elifs into elses/doifs, but saving variables/results can generate new elifs.
+            # matching_doif = get_doif_for(parsetree, node_index)
+            # insertion_point = matching_doif["start_token"]
+            pass
+
+        while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
+            insertion_point -= 1
 
         for a in toplevel["args"]:
-            insertions += visit(
-                a, toplevel, insertion_point, toplevel["type"] == "DotCommand"
-            )
+            insertions += visit(a, node_index, toplevel["type"] == "DotCommand")
 
         if toplevel["type"] == "DotCommand":
-            saved_targ_variable = object()
+            indent = get_indentation_at(tokens, toplevel["start_token"])
             insertions.append(
                 (
                     insertion_point,
-                    generate_snippet(
-                        "seta $__saved_targ targ\n",
-                        "targ {}\n".format(toplevel["targ"]),
-                        tokens[toplevel["start_token"] + 2 : toplevel["end_token"] + 1],
-                        "\ntarg $__saved_targ",
+                    add_indent(
+                        generate_snippet(
+                            "seta $__saved_targ targ\n",
+                            "targ {}\n".format(toplevel["targ"]),
+                            tokens[
+                                toplevel["start_token"] + 2 : toplevel["end_token"] + 1
+                            ],
+                            "\ntarg $__saved_targ\n",
+                        ),
+                        indent,
                     ),
                 )
             )
-            whiteout_node_from_tokens(toplevel, tokens)
+            whiteout_node_and_line_from_tokens(toplevel, tokens)
+
+        node_index += 1
 
     for insertion_point, toks in reversed(insertions):
-        indent = get_indentation_at(tokens, insertion_point)
         for t in reversed(toks):
-            if t[0] == TOK_NEWLINE:
-                tokens.insert(insertion_point, (TOK_WHITESPACE, indent))
             tokens.insert(insertion_point, t)
 
     return tokens

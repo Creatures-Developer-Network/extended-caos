@@ -427,6 +427,11 @@ def whiteout_child_node_from_tokens(parent_node, child_node, tokens):
         tokens[j] = (TOK_WHITESPACE, "")
 
 
+def whiteout_node_and_line(tokens, nodes, node_index):
+    whiteout_node_and_line_from_tokens(nodes[node_index], tokens)
+    del nodes[node_index]
+
+
 def whiteout_node_and_line_from_tokens(node, tokens):
     startp = node["start_token"]
     endp = node["end_token"]
@@ -722,27 +727,34 @@ def replace_constants(tokens):
     return tokens
 
 
+def insert_before_node(tokens, nodes, node_index, snippet):
+    insertion_point = nodes[node_index]["start_token"]
+    while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
+        insertion_point -= 1
+
+    for i, x in enumerate(snippet):
+        tokens.insert(insertion_point + i, x)
+    offset = len(snippet)
+    # TODO: fix token offsets on child nodes? it's much slower
+    # add_token_offset_to_nodes(nodes[node_index:], offset)
+    for n in nodes[node_index:]:
+        n["start_token"] += offset
+        n["end_token"] += offset
+
+    parsedsnippet = parse(snippet + [(TOK_EOI, "")])
+    for i, x in enumerate(parsedsnippet):
+        x["start_token"] += insertion_point
+        x["end_token"] += insertion_point
+        nodes.insert(node_index + i, x)
+
+    return node_index + len(parsedsnippet)
+
+
 def turn_elifs_into_elses(tokens):
 
     tokens = tokens[:]
 
     nodes = parse(tokens)
-
-    def insert_before_node(node_index, snippet):
-        insertion_point = nodes[node_index]["start_token"]
-        for i, x in enumerate(snippet):
-            tokens.insert(insertion_point + i, x)
-        offset = len(snippet)
-        # TODO: fix token offsets on child nodes? it's much slower
-        for n in nodes[node_index:]:
-            n["start_token"] += offset
-            n["end_token"] += offset
-
-        parsedsnippet = parse(snippet + [(TOK_EOI, "")])
-        for i, x in enumerate(parsedsnippet):
-            x["start_token"] += insertion_point
-            x["end_token"] += insertion_point
-            nodes.insert(node_index + i, x)
 
     modified_tree = False
     p = 0
@@ -754,8 +766,9 @@ def turn_elifs_into_elses(tokens):
 
         # add new else before us
         indent = get_indentation_at(tokens, node["start_token"])
-        insert_before_node(p, generate_snippet("else\n" + indent + "    "))
-        p += 1
+        p = insert_before_node(
+            tokens, nodes, p, generate_snippet(indent + "else\n" + "    ")
+        )
 
         # change us to a doif
         tokens[node["start_token"]] = (TOK_WORD, "doif")
@@ -766,11 +779,11 @@ def turn_elifs_into_elses(tokens):
 
         # indent everything up to next endi
         for j in range(p + 1, endi_index):
-            insert_before_node(j, generate_snippet("    "))
+            insert_before_node(tokens, nodes, j, generate_snippet("    "))
 
         # add new endi
-        snippet = generate_snippet("    endi\n" + indent)
-        insert_before_node(endi_index, snippet)
+        snippet = generate_snippet(indent + "    endi\n")
+        insert_before_node(tokens, nodes, endi_index, snippet)
 
         # not necessary, as we're now a DOIF and will be skipped on next iteration,
         # but good practice
@@ -782,20 +795,23 @@ def turn_elifs_into_elses(tokens):
 def handle_condition_short_circuiting(tokens):
     tokens = tokens[:]
 
-    insertions = []
     parsetree = parse(tokens)
 
-    for node in parsetree:
+    node_index = 0
+    while node_index < len(parsetree):
+        node = parsetree[node_index]
         if not (
             node["type"] == "Command"
             and len(node["args"]) == 1
             and node["args"][0]["type"] == "Condition"
         ):
+            node_index += 1
             continue
 
         condition_args = node["args"][0]["args"]
         needs_short_circuit = len(condition_args) > 3
         if not needs_short_circuit:
+            node_index += 1
             continue
 
         # this is the tricky part
@@ -856,31 +872,29 @@ def handle_condition_short_circuiting(tokens):
             # if the previous indent is smaller, we just went up a level, so stay there
             previous_indent = current_indent
 
-        insertions.append(
-            (
-                node["start_token"],
-                add_indent(generate_snippet(*snippet_parts), previous_indent),
-            )
+        indent = get_indentation_at(tokens, node["start_token"])
+
+        node_index = insert_before_node(
+            tokens,
+            parsetree,
+            node_index,
+            add_indent(generate_snippet(*snippet_parts), previous_indent),
         )
 
-        indent = get_indentation_at(tokens, node["start_token"])
-        insertions.append(
+        node_index = insert_before_node(
+            tokens,
+            parsetree,
+            node_index,
             (
-                node["start_token"],
                 [(TOK_NEWLINE, "\n")]
                 + add_indent(
                     generate_snippet("{} {} = 1".format(node["name"], conditionvar)),
                     indent,
                 )
-                + [(TOK_NEWLINE, "\n")],
-            )
+                + [(TOK_NEWLINE, "\n")]
+            ),
         )
-
-        whiteout_node_and_line_from_tokens(node, tokens)
-
-    for insertion_point, toks in reversed(insertions):
-        for t in reversed(toks):
-            tokens.insert(insertion_point, t)
+        whiteout_node_and_line(tokens, parsetree, node_index)
 
     return tokens
 

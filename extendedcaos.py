@@ -588,20 +588,17 @@ def add_indent(tokens, indent):
     return newtokens
 
 
-def expand_macros(tokens):
-    tokens = tokens[:]
-
+def expand_macros(tokens, parsetree):
     # collect macros
     macros = []
     p = 0
-    nodes = parse(tokens)
-    while p < len(nodes):
-        if nodes[p]["type"] != "MacroDefinitionStart":
+    while p < len(parsetree):
+        if parsetree[p]["type"] != "MacroDefinitionStart":
             p += 1
             continue
 
-        start_node = nodes[p]
-        for a in nodes[p]["argnames"]:
+        start_node = parsetree[p]
+        for a in parsetree[p]["argnames"]:
             if a[0] == "$":
                 raise Exception(
                     "Macro argument name mustn't start with '$', got %r" % a
@@ -611,16 +608,18 @@ def expand_macros(tokens):
         while True:
             if p >= len(tokens):
                 raise Exception("Didn't see 'endmacro'")
-            if nodes[p]["type"] == "MacroDefinitionEnd":
+            if parsetree[p]["type"] == "MacroDefinitionEnd":
                 break
             p += 1
 
-        end_node = nodes[p]
+        end_node = parsetree[p]
         macros.append(
             (
                 start_node["name"],
                 start_node["argnames"],
-                tokens[start_node["body_start_token"] : nodes[p - 1]["end_token"] + 1],
+                tokens[
+                    start_node["body_start_token"] : parsetree[p - 1]["end_token"] + 1
+                ],
             )
         )
         p += 1
@@ -646,8 +645,6 @@ def expand_macros(tokens):
     }
 
     # parse and do expansions
-    parsetree = parse(tokens)
-    insertions = []
     last_macro_start_token = None
     node_index = 0
     while node_index < len(parsetree):
@@ -667,6 +664,7 @@ def expand_macros(tokens):
             whiteout_node_and_line_from_tokens(toplevel, tokens)
             node_index += 1
             continue
+
         if toplevel["type"] != "Command":
             node_index += 1
             continue
@@ -674,36 +672,29 @@ def expand_macros(tokens):
             node_index += 1
             continue
 
-        insertion_point = toplevel["start_token"]
         indent = get_indentation_at(tokens, toplevel["start_token"])
-        whiteout_node_and_line_from_tokens(toplevel, tokens)
 
         argvars = []
         argnames = macros_by_name[toplevel["name"].lower()][0]
         for i, a in enumerate(toplevel["args"]):
             argvar = argnames[i]
 
-            insertions.append(
-                (
-                    insertion_point,
-                    add_indent(generate_save_result_to_variable(argvar, a), indent),
-                )
+            node_index = insert_before_node(
+                tokens,
+                parsetree,
+                node_index,
+                add_indent(generate_save_result_to_variable(argvar, a), indent),
             )
 
-        insertions.append(
-            (
-                insertion_point,
-                add_indent(macros_by_name[toplevel["name"].lower()][1], indent)
-                + [(TOK_NEWLINE, "\n")],
-            )
+        node_index = insert_before_node(
+            tokens,
+            parsetree,
+            node_index,
+            add_indent(macros_by_name[toplevel["name"].lower()][1], indent)
+            + [(TOK_NEWLINE, "\n")],
         )
-        node_index += 1
 
-    for insertion_point, toks in reversed(insertions):
-        for t in reversed(toks):
-            tokens.insert(insertion_point, t)
-
-    return tokens
+        whiteout_node_and_line(tokens, parsetree, node_index)
 
 
 def replace_constants(tokens):
@@ -920,7 +911,7 @@ def extendedcaos_to_caos(s):
     handle_condition_short_circuiting(tokens, parsetree)
 
     # Transformations in no particular order
-    tokens = expand_macros(tokens)
+    expand_macros(tokens, parsetree)
     tokens = explicit_targs(tokens)
     tokens = replace_constants(tokens)
     tokens = expand_agentvariables(tokens)

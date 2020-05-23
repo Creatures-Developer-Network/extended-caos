@@ -448,7 +448,7 @@ def parse_value(state):
             )
             return {"type": "Variable", "value": value, "token": startp}
         return parse_command(state, False)
-    elif state.tokens[state.p][0] in (TOK_INTEGER, TOK_CHARACTER):
+    elif state.tokens[state.p][0] in (TOK_INTEGER, TOK_CHARACTER, TOK_BINARY_LITERAL):
         value = state.tokens[state.p][1]
         state.p += 1
         state.peekmatch(state.p, (TOK_WHITESPACE, TOK_COMMENT, TOK_EOI, TOK_NEWLINE))

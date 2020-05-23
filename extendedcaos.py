@@ -222,64 +222,6 @@ def generate_save_result_to_variable(variable_name, node):
     )
 
 
-def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
-    if node.get("type", "") == "DotCommand":
-        insertions = []
-        for a in node["args"]:
-            insertions += explicit_targs_visitor(a, tokens, statement_start, True)
-
-        value_variable = "$__{}_{}__t{}".format(
-            node["targ"].lstrip("$"), node["name"], node["start_token"]
-        )
-
-        newnode = dict(node)
-        newnode.update({"type": "Command", "start_token": node["start_token"] + 2})
-        insertions.append(
-            (
-                statement_start,
-                generate_snippet(
-                    "seta $__saved_targ targ\n",
-                    "targ {}\n".format(node["targ"]),
-                    generate_save_result_to_variable(value_variable, newnode),
-                    "targ $__saved_targ\n",
-                ),
-            )
-        )
-        whiteout_node_and_line_from_tokens(node, tokens)
-        tokens[node["start_token"]] = (TOK_WORD, value_variable)
-        node.clear()
-        node.update(
-            {"type": "Variable", "value": value_variable,}
-        )
-        return insertions
-
-    elif node.get("type", "") in ("Command", "Condition"):
-        insertions = []
-        for a in node["args"]:
-            insertions += explicit_targs_visitor(
-                a, tokens, statement_start, in_dotcommand
-            )
-
-        if in_dotcommand:
-            value_variable = "$__targ_{}__t{}".format(node["name"], node["start_token"])
-            insertions.append(
-                (
-                    statement_start,
-                    generate_save_result_to_variable(value_variable, node),
-                )
-            )
-            whiteout_node_and_line_from_tokens(node, tokens)
-            tokens[node["start_token"]] = (TOK_WORD, value_variable)
-            node.clear()
-            node.update(
-                {"type": "Variable", "value": value_variable,}
-            )
-
-        return insertions
-    else:
-        return []
-
-
 def get_doif_for(parsetree, p):
     assert parsetree[p]["type"] == "Command"
     assert parsetree[p]["name"] == "elif"
@@ -334,6 +276,63 @@ def explicit_targs(tokens):
     tokens = tokens[:]
     parsetree = parse(tokens)
 
+    def visit(node, toplevel_node, statement_start, in_dotcommand):
+        if node.get("type", "") == "DotCommand":
+            startp = node["start_token_in_parent"] + toplevel_node["start_token"]
+            insertions = []
+            for a in node["args"]:
+                insertions += visit(a, toplevel_node, statement_start, True)
+
+            value_variable = "$__{}_{}__t{}".format(
+                node["targ"].lstrip("$"), node["name"], startp
+            )
+
+            newnode = dict(node)
+            newnode.update({"type": "Command"})
+            insertions.append(
+                (
+                    statement_start,
+                    generate_snippet(
+                        "seta $__saved_targ targ\n",
+                        "targ {}\n".format(node["targ"]),
+                        generate_save_result_to_variable(value_variable, newnode),
+                        "targ $__saved_targ\n",
+                    ),
+                )
+            )
+            whiteout_child_node_from_tokens(toplevel_node, node, tokens)
+            tokens[startp] = (TOK_WORD, value_variable)
+            node.clear()
+            node.update(
+                {"type": "Variable", "value": value_variable,}
+            )
+            return insertions
+
+        elif node.get("type", "") in ("Command", "Condition"):
+            insertions = []
+            for a in node["args"]:
+                insertions += visit(a, toplevel_node, statement_start, in_dotcommand)
+
+            if in_dotcommand:
+                startp = node["start_token_in_parent"] + toplevel_node["start_token"]
+                value_variable = "$__targ_{}__t{}".format(node["name"], startp)
+                insertions.append(
+                    (
+                        statement_start,
+                        generate_save_result_to_variable(value_variable, node),
+                    )
+                )
+                whiteout_child_node_from_tokens(toplevel_node, node, tokens)
+                tokens[startp] = (TOK_WORD, value_variable)
+                node.clear()
+                node.update(
+                    {"type": "Variable", "value": value_variable,}
+                )
+
+            return insertions
+        else:
+            return []
+
     insertions = []
     for i, toplevel in enumerate(parsetree):
         if toplevel["type"] not in ("Command", "Condition", "DotCommand"):
@@ -343,13 +342,13 @@ def explicit_targs(tokens):
         if toplevel["type"] == "Command" and toplevel["name"] == "elif":
             # uh-oh. go find last doif. this shouldn't ever have any insertions
             # since we've converted elifs into elses/doifs, but keep this just in
-            # case
+            # case. saving variables/results can generate new elifs.
             matching_doif = get_doif_for(parsetree, i)
             insertion_point = matching_doif["start_token"]
 
         for a in toplevel["args"]:
-            insertions += explicit_targs_visitor(
-                a, tokens, insertion_point, toplevel["type"] == "DotCommand"
+            insertions += visit(
+                a, toplevel, insertion_point, toplevel["type"] == "DotCommand"
             )
 
         if toplevel["type"] == "DotCommand":
@@ -417,6 +416,13 @@ def remove_extraneous_targ_saving(tokens):
 def whiteout_node_from_tokens(node, tokens):
     startp = node["start_token"]
     endp = node["end_token"]
+    for j in range(startp, endp + 1):
+        tokens[j] = (TOK_WHITESPACE, "")
+
+
+def whiteout_child_node_from_tokens(parent_node, child_node, tokens):
+    startp = parent_node["start_token"] + child_node["start_token_in_parent"]
+    endp = parent_node["start_token"] + child_node["end_token_in_parent"]
     for j in range(startp, endp + 1):
         tokens[j] = (TOK_WHITESPACE, "")
 
@@ -497,9 +503,11 @@ def expand_agentvariables(tokens):
     # do replacements
     insertions = []
 
-    def visit(node):
+    def visit(node, toplevel_node):
         if node["type"] == "DotVariable":
-            insertion_point = node["start_token"]
+            insertion_point = (
+                node["start_token_in_parent"] + toplevel_node["start_token"]
+            )
             variable_index = var_mapping[node["name"]][2:4]
             if node["targ"] == "targ":
                 insertions.append(
@@ -518,13 +526,13 @@ def expand_agentvariables(tokens):
                         ),
                     )
                 )
-            whiteout_node_and_line_from_tokens(node, tokens)
+            whiteout_child_node_from_tokens(toplevel_node, node, tokens)
         elif node.get("args"):
             for a in node["args"]:
-                visit(a)
+                visit(a, toplevel_node)
 
     for toplevel in parsetree:
-        visit(toplevel)
+        visit(toplevel, toplevel)
 
     for insertion_point, toks in reversed(insertions):
         for t in reversed(toks):

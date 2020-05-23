@@ -12,6 +12,7 @@ class ParserState:
         "command_namespaces",
         "constant_definitions",
         "macro_definitions",
+        "toplevel_startp",
     ]
 
     def __init__(self, tokens):
@@ -21,6 +22,7 @@ class ParserState:
         self.constant_definitions = {}
         self.macro_definitions = {}
         self.p = 0
+        self.toplevel_startp = 0
 
     def peekmatch(self, newp, toktypes):
         if not isinstance(toktypes, (tuple, list, set)):
@@ -188,8 +190,8 @@ def parse_command(state, is_toplevel):
                 "type": "DotVariable",
                 "name": command,
                 "targ": targ,
-                "start_token": startp,
-                "end_token": state.p - 1,
+                "start_token_in_parent": startp - state.toplevel_startp,
+                "end_token_in_parent": state.p - 1 - state.toplevel_startp,
             }
         command = command.lower()
     elif state.tokens[state.p][1].lower() in state.command_namespaces:
@@ -233,27 +235,34 @@ def parse_command(state, is_toplevel):
 
     end_token = state.p - 1
 
+    node = {
+        "commandtype": ("statement" if is_toplevel else "expression"),
+        "commandret": commandinfo["type"],
+        "args": args,
+    }
     if dotcommand:
-        return {
-            "type": "DotCommand",
-            "targ": targ,
-            "name": command,
-            "commandtype": ("statement" if is_toplevel else "expression"),
-            "commandret": commandinfo["type"],
-            "args": args,
-            "start_token": startp,
-            "end_token": end_token,
-        }
+        node.update(
+            {"type": "DotCommand", "targ": targ, "name": command,}
+        )
     else:
-        return {
-            "type": "Command",
-            "name": (namespace + " " if namespace else "") + command,
-            "commandtype": ("statement" if is_toplevel else "expression"),
-            "commandret": commandinfo["type"],
-            "args": args,
-            "start_token": startp,
-            "end_token": end_token,
-        }
+        node.update(
+            {
+                "type": "Command",
+                "name": (namespace + " " if namespace else "") + command,
+            }
+        )
+    if is_toplevel:
+        node.update(
+            {"start_token": startp, "end_token": end_token,}
+        )
+    else:
+        node.update(
+            {
+                "start_token_in_parent": startp - state.toplevel_startp,
+                "end_token_in_parent": end_token - state.toplevel_startp,
+            }
+        )
+    return node
 
 
 def parse_constant_definition(state):
@@ -396,6 +405,7 @@ def parse_macro_definition(state):
 
 
 def parse_toplevel(state):
+    state.toplevel_startp = state.p
     if state.tokens[state.p][0] == TOK_WORD and state.tokens[state.p][1] == "macro":
         return parse_macro_definition(state)
     elif (

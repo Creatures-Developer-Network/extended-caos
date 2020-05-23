@@ -14,12 +14,10 @@ class ParserState:
         "macro_definitions",
     ]
 
-    def __init__(self, tokens, commands):
+    def __init__(self, tokens):
         self.tokens = tokens
-        self.commands = commands
-        self.command_namespaces = {
-            _.get("namespace") for _ in commands.values() if _.get("namespace")
-        }
+        self.commands = COMMAND_INFO_C3_DICT
+        self.command_namespaces = COMMAND_INFO_C3_NAMESPACES
         self.constant_definitions = {}
         self.macro_definitions = {}
         self.p = 0
@@ -474,7 +472,7 @@ def parse_value(state):
 
 def parse(tokens):
     logger.debug("Parsing...")
-    state = ParserState(tokens, COMMAND_INFO_C3_DICT)
+    state = ParserState(tokens)
     fst = []
     while True:
         maybe_eat_whitespace_or_newline_or_comment(state)

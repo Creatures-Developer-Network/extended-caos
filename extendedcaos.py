@@ -672,26 +672,28 @@ def expand_macros(tokens, parsetree):
     }
 
     # parse and do expansions
-    last_macro_start_token = None
+    last_macro_start_index = None
     node_index = 0
     while node_index < len(parsetree):
         toplevel = parsetree[node_index]
         if toplevel["type"] == "MacroDefinitionEnd":
+            startp = parsetree[last_macro_start_index]["start_token"]
+            while startp > 0 and tokens[startp - 1][0] == TOK_WHITESPACE:
+                startp -= 1
             endp = toplevel["end_token"]
             while tokens[endp + 1][0] == TOK_WHITESPACE:
                 endp += 1
             if tokens[endp + 1][0] == TOK_NEWLINE:
                 endp += 1
-            for j in range(last_macro_start_token, endp + 1):
+            for j in range(startp, endp + 1):
                 tokens[j] = (TOK_WHITESPACE, "")
-            node_index += 1
+            del parsetree[last_macro_start_index : node_index + 1]
+            node_index = last_macro_start_index
             continue
         if toplevel["type"] == "MacroDefinitionStart":
-            last_macro_start_token = toplevel["start_token"]
-            whiteout_node_and_line_from_tokens(toplevel, tokens)
+            last_macro_start_index = node_index
             node_index += 1
             continue
-
         if toplevel["type"] != "Command":
             node_index += 1
             continue

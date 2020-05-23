@@ -193,10 +193,19 @@ def generate_save_result_to_variable(variable_name, node):
     if node["type"] == "Variable" or (
         node["type"] == "Command" and node["commandret"] == "variable"
     ):
+        # avoid ELIF because it's hard for other transformations to handle
         return generate_snippet(
-            "doif type {value} = 0 or type {value} = 1\n    setv {var} {value}\nelif type {value} = 2\n    sets {var} {value}\nelse\n    seta {var} {value}\nendi\n".format(
-                value=value, var=variable_name
-            )
+            (
+                "doif type {value} = 0 or type {value} = 1\n"
+                + "    setv {var} {value}\n"
+                + "else\n"
+                + "    doif type {value} = 2\n"
+                + "        sets {var} {value}\n"
+                + "    else\n"
+                + "        seta {var} {value}\n"
+                + "    endi\n"
+                + "endi\n"
+            ).format(value=value, var=variable_name)
         )
 
     if node["type"] == "LiteralString":

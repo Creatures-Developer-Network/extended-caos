@@ -374,10 +374,12 @@ class TestExtendedCAOS(unittest.TestCase):
         * macro with variable
         doif type va00 = 0 or type va00 = 1
             setv va01 va00
-        elif type va00 = 2
-            sets va01 va00
         else
-            seta va01 va00
+            doif type va00 = 2
+                sets va01 va00
+            else
+                seta va01 va00
+            endi
         endi
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000
@@ -388,10 +390,12 @@ class TestExtendedCAOS(unittest.TestCase):
         * macro with command of an unknown result type
         doif type from = 0 or type from = 1
             setv va01 from
-        elif type from = 2
-            sets va01 from
         else
-            seta va01 from
+            doif type from = 2
+                sets va01 from
+            else
+                seta va01 from
+            endi
         endi
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000

@@ -474,12 +474,7 @@ def parse_value(state):
 
 def parse(tokens):
     logger.debug("Parsing...")
-    command_info = {}
-    for ci in COMMAND_INFO_C3:
-        is_toplevel = ci["type"] == "command"
-        key = (ci.get("namespace", "").lower(), ci["match"].lower(), is_toplevel)
-        command_info[key] = ci
-    state = ParserState(tokens, command_info)
+    state = ParserState(tokens, COMMAND_INFO_C3_DICT)
     fst = []
     while True:
         maybe_eat_whitespace_or_newline_or_comment(state)

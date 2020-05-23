@@ -24,3 +24,9 @@ COMMAND_INFO_C3.append(
         "name": "FACE",
     }
 )
+
+COMMAND_INFO_C3_DICT = {}
+for ci in COMMAND_INFO_C3:
+    is_toplevel = ci["type"] == "command"
+    key = (ci.get("namespace", "").lower(), ci["match"].lower(), is_toplevel)
+    COMMAND_INFO_C3_DICT[key] = ci

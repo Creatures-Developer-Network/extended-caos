@@ -471,7 +471,6 @@ def parse_value(state):
 
 
 def parse(tokens):
-    logger.debug("Parsing...")
     state = ParserState(tokens)
     fst = []
     while True:

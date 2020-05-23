@@ -74,7 +74,12 @@ def lexcaos(s):
             yield (TOK_WHITESPACE, s[basep:p])
         elif s[p] == ".":
             p += 1
-            yield (TOK_DOT, ".")
+            if peek(s, p) in string.digits:
+                while peek(s, p) in string.digits:
+                    p += 1
+                yield (TOK_FLOAT, s[basep:p])
+            else:  # nonstandard
+                yield (TOK_DOT, ".")
         elif s[p] in string.ascii_letters + "_":
             while (
                 peek(s, p)
@@ -93,7 +98,7 @@ def lexcaos(s):
                 )
             while peek(s, p) and peek(s, p) in string.digits:
                 p += 1
-            yield (TOK_INTEGER, int(s[basep:p]))
+            yield (TOK_INTEGER, s[basep:p])
         elif s[p] in string.digits:
             while peek(s, p) and peek(s, p) in string.digits:
                 p += 1

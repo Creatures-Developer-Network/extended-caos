@@ -498,9 +498,9 @@ class TestExtendedCAOS(unittest.TestCase):
             endi
         endi
         """
-        self.assertMultiLineEqual(
-            desired_output, tokens_to_string(turn_elifs_into_elses(lexcaos(input)))
-        )
+        tokens = lexcaos(input)
+        turn_elifs_into_elses(tokens, parse(tokens))
+        self.assertMultiLineEqual(desired_output, tokens_to_string(tokens))
 
     def test_short_circuit_doifs(self):
         input = """

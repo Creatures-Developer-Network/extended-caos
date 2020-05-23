@@ -750,13 +750,7 @@ def insert_before_node(tokens, nodes, node_index, snippet):
     return node_index + len(parsedsnippet)
 
 
-def turn_elifs_into_elses(tokens):
-
-    tokens = tokens[:]
-
-    nodes = parse(tokens)
-
-    modified_tree = False
+def turn_elifs_into_elses(tokens, nodes):
     p = 0
     while p < len(nodes):
         node = nodes[p]
@@ -789,14 +783,8 @@ def turn_elifs_into_elses(tokens):
         # but good practice
         p += 1
 
-    return tokens
 
-
-def handle_condition_short_circuiting(tokens):
-    tokens = tokens[:]
-
-    parsetree = parse(tokens)
-
+def handle_condition_short_circuiting(tokens, parsetree):
     node_index = 0
     while node_index < len(parsetree):
         node = parsetree[node_index]
@@ -896,8 +884,6 @@ def handle_condition_short_circuiting(tokens):
         )
         whiteout_node_and_line(tokens, parsetree, node_index)
 
-    return tokens
-
 
 def extendedcaos_to_caos(s):
     tokens = lexcaos(s)
@@ -906,18 +892,22 @@ def extendedcaos_to_caos(s):
     # that get added
     tokens = move_comments_to_own_line(tokens)
 
+    # Get the initial parsetree. Transformations will modify tokens and the parsetree
+    # at the same time
+    parsetree = parse(tokens)
+
     # Turn ELIF into ELSE/DOIF. This absolutely must come near the beginning - other
     # transformations make the assumption that commands on a previous line will
     # execute first. ELIF is the one command that breaks that rule!
     # TODO: undo this transformation later on, if no other transformation has
     # added anything in-between the ELSE and DOIF
-    tokens = turn_elifs_into_elses(tokens)
+    turn_elifs_into_elses(tokens, parsetree)
 
     # Handle condition short-circuiting by extracting boolean logic and doing
     # it manually. This needs to come before macro expansion, explicit targs,
     # or any other transformation that modify the condition; otherwise, the
     # short-circuiting won't actually work
-    tokens = handle_condition_short_circuiting(tokens)
+    handle_condition_short_circuiting(tokens, parsetree)
 
     # Transformations in no particular order
     tokens = expand_macros(tokens)

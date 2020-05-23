@@ -151,17 +151,38 @@ def get_indentation_at_previous_line(tokens, i):
         return get_indentation_at(tokens, i)
 
 
-def generate_save_result_to_variable(variable_name, node, tokens):
-    startp = node.get("start_token", node.get("token"))
-    endp = node.get("end_token", node.get("token"))
+def node_to_string(original_node):
+    parts = []
+
+    def visit(n):
+        type = n["type"]
+        if type in ("Command", "Condition", "DotCommand"):
+            parts.append(n["name"])
+            for a in n["args"]:
+                visit(a)
+        elif type in (
+            "Variable",
+            "LiteralString",
+            "LiteralInteger",
+            "LiteralFloat",
+            "LiteralBytestring",
+        ):
+            parts.append(n["value"])
+        else:
+            raise Exception("Unimplemented node type %r" % n)
+
+    visit(original_node)
+    return " ".join(parts)
+
+
+def generate_save_result_to_variable(variable_name, node):
+    value = node_to_string(node)
 
     # TODO: can we look at what the parent is expecting?
     # e.g. "va00", or "FROM" in Docking Station, which can be an agent or a string
     if node["type"] == "Variable" or (
         node["type"] == "Command" and node["commandret"] == "variable"
     ):
-        value = tokens_to_string(tokens[startp : endp + 1])
-        indent = get_indentation_at(tokens, startp)
         return generate_snippet(
             "doif type {value} = 0 or type {value} = 1\n    setv {var} {value}\nelif type {value} = 2\n    sets {var} {value}\nelse\n    seta {var} {value}\nendi\n".format(
                 value=value, var=variable_name
@@ -186,7 +207,7 @@ def generate_save_result_to_variable(variable_name, node, tokens):
 
     return generate_snippet(
         "{setx} {varname} ".format(setx=setx_command, varname=variable_name),
-        tokens[startp : endp + 1],
+        value,
         "\n",
     )
 
@@ -209,13 +230,17 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
                 generate_snippet(
                     "seta $__saved_targ targ\n",
                     "targ {}\n".format(node["targ"]),
-                    generate_save_result_to_variable(value_variable, newnode, tokens),
+                    generate_save_result_to_variable(value_variable, newnode),
                     "targ $__saved_targ\n",
                 ),
             )
         )
         whiteout_node_and_line_from_tokens(node, tokens)
         tokens[node["start_token"]] = (TOK_WORD, value_variable)
+        node.clear()
+        node.update(
+            {"type": "Variable", "value": value_variable,}
+        )
         return insertions
 
     elif node.get("type", "") in ("Command", "Condition"):
@@ -230,11 +255,15 @@ def explicit_targs_visitor(node, tokens, statement_start, in_dotcommand):
             insertions.append(
                 (
                     statement_start,
-                    generate_save_result_to_variable(value_variable, node, tokens),
+                    generate_save_result_to_variable(value_variable, node),
                 )
             )
             whiteout_node_and_line_from_tokens(node, tokens)
             tokens[node["start_token"]] = (TOK_WORD, value_variable)
+            node.clear()
+            node.update(
+                {"type": "Variable", "value": value_variable,}
+            )
 
         return insertions
     else:
@@ -628,14 +657,10 @@ def expand_macros(tokens):
         argvars = []
         argnames = macros_by_name[toplevel["name"].lower()][0]
         for i, a in enumerate(toplevel["args"]):
-            if "start_token" not in a:
-                a["start_token"] = a["token"]
-            if "end_token" not in a:
-                a["end_token"] = a["token"]
             argvar = argnames[i]
 
             insertions.append(
-                (insertion_point, generate_save_result_to_variable(argvar, a, tokens))
+                (insertion_point, generate_save_result_to_variable(argvar, a))
             )
         whiteout_node_from_tokens(toplevel, tokens)
 

@@ -66,16 +66,17 @@ def namedvariables_to_vaxx(tokens, parsetree):
     # find script extents
     # TODO: expose this elsewhere too?
     for i, t in enumerate(tokens):
-        if t[0] == TOK_WORD and t[1].lower() in ("scrp", "rscr"):
-            scripts.append(script(i, i))
-            continue
-        if t[0] == TOK_WORD and re.match(r"(?i)^va\d\d$", t[1]):
-            if t[1].lower() not in scripts[-1].vaxx_vars:
-                scripts[-1].vaxx_vars.append(t[1].lower())
-        if t[0] == TOK_WORD and t[1][0] == "$":
-            if t[1] not in scripts[-1].dollar_vars:
-                scripts[-1].dollar_vars.append(t[1])
-        scripts[-1].end = i
+        if t[0] == TOK_WORD:
+            if t[1] in ("scrp", "rscr"):
+                scripts[-1].end = i - 1
+                scripts.append(script(i, i))
+            elif re.match(r"(?i)^va\d\d$", t[1]):
+                if t[1].lower() not in scripts[-1].vaxx_vars:
+                    scripts[-1].vaxx_vars.append(t[1].lower())
+            elif t[1][0] == "$":
+                if t[1] not in scripts[-1].dollar_vars:
+                    scripts[-1].dollar_vars.append(t[1])
+    scripts[-1].end = len(tokens) - 1
 
     # for each script, map named variables to actual variables, then replace the
     # tokens
@@ -91,9 +92,10 @@ def namedvariables_to_vaxx(tokens, parsetree):
             if not possibles:
                 raise Exception("Couldn't allocate variable for '%s'" % d)
             var_mapping[d] = possibles[0]
-        for i in range(s.start, s.end + 1):
-            if tokens[i][0] == TOK_WORD and tokens[i][1][0] == "$":
-                tokens[i] = (TOK_WORD, var_mapping[tokens[i][1]])
+        if s.dollar_vars:
+            for i in range(s.start, s.end + 1):
+                if tokens[i][0] == TOK_WORD and tokens[i][1][0] == "$":
+                    tokens[i] = (TOK_WORD, var_mapping[tokens[i][1]])
 
 
 def get_indentation_at(tokens, i):

@@ -156,8 +156,11 @@ def nodes_to_string(nodes):
 
     def visit(n):
         type = n["type"]
-        if type in ("Command", "Condition"):
+        if type in ("Command",):
             parts.append(n["name"])
+            for a in n["args"]:
+                visit(a)
+        elif type in ("Condition",):
             for a in n["args"]:
                 visit(a)
         elif type in ("DotCommand",):

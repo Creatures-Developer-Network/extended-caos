@@ -489,13 +489,10 @@ def remove_double_targ(tokens):
     return tokens
 
 
-def expand_agentvariables(tokens):
-    tokens = tokens[:]
+def expand_agentvariables(tokens, parsetree):
 
     # build object variable mapping
     var_mapping = {}
-
-    parsetree = parse(tokens)
     for toplevel in parsetree:
         if not toplevel["type"] == "AgentVariableDefinition":
             continue
@@ -504,44 +501,61 @@ def expand_agentvariables(tokens):
         whiteout_node_and_line_from_tokens(toplevel, tokens)
 
     # do replacements
-    insertions = []
-
     def visit(node, toplevel_node):
         if node["type"] == "DotVariable":
-            insertion_point = (
-                node["start_token_in_parent"] + toplevel_node["start_token"]
-            )
+            insertion_point = node["start_token_in_parent"]
             variable_index = var_mapping[node["name"]][2:4]
+            whiteout_child_node_from_tokens(toplevel_node, node, tokens)
+
             if node["targ"] == "targ":
-                insertions.append(
-                    (insertion_point, generate_snippet("ov" + variable_index))
-                )
+                return [(insertion_point, generate_snippet("ov" + variable_index))]
             elif node["targ"] == "ownr":
-                insertions.append(
-                    (insertion_point, generate_snippet("mv" + variable_index))
-                )
+                return [(insertion_point, generate_snippet("mv" + variable_index))]
             else:
-                insertions.append(
+                return [
                     (
                         insertion_point,
                         generate_snippet(
                             "avar {} {}".format(node["targ"], variable_index)
                         ),
                     )
-                )
-            whiteout_child_node_from_tokens(toplevel_node, node, tokens)
+                ]
         elif node.get("args"):
+            insertions = []
             for a in node["args"]:
-                visit(a, toplevel_node)
+                insertions += visit(a, toplevel_node)
+            return insertions
+        else:
+            return []
 
-    for toplevel in parsetree:
-        visit(toplevel, toplevel)
+    node_index = 0
+    while node_index < len(parsetree):
+        toplevel = parsetree[node_index]
+        insertions = []
+        for a in toplevel.get("args", []):
+            insertions += visit(a, toplevel)
 
-    for insertion_point, toks in reversed(insertions):
-        for t in reversed(toks):
-            tokens.insert(insertion_point, t)
+        if insertions:
+            for insertion_point, toks in reversed(insertions):
+                for t in reversed(toks):
+                    tokens.insert(insertion_point + toplevel["start_token"], t)
 
-    return tokens
+            num_tokens_inserted = sum(len(_[1]) for _ in insertions)
+            add_token_offset_to_nodes(parsetree[node_index + 1 :], num_tokens_inserted)
+
+            reparsednodes = parse(
+                tokens[
+                    toplevel["start_token"] : toplevel["end_token"]
+                    + num_tokens_inserted
+                    + 1
+                ]
+                + [(TOK_EOI, "")]
+            )
+            add_token_offset_to_nodes(reparsednodes, toplevel["start_token"])
+            assert len(reparsednodes) == 1
+            parsetree[node_index] = reparsednodes[0]
+
+        node_index += 1
 
 
 def strip_indent(tokens):
@@ -932,7 +946,7 @@ def extendedcaos_to_caos(s):
     expand_macros(tokens, parsetree)
     explicit_targs(tokens, parsetree)
     replace_constants(tokens, parsetree)
-    tokens = expand_agentvariables(tokens)
+    expand_agentvariables(tokens, parsetree)
 
     # Explicit targ adds in a lot of cruft around saving targ and resetting
     # targ. Try to remove the cruft when possible to make the end result

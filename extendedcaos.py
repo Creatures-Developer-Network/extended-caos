@@ -3,53 +3,49 @@
 import itertools
 import json
 import re
+import logging
 import string
 import sys
 
 from caoslexer import *
 from caosparser import *
 
+logger = logging.getLogger(__name__)
+
 
 def move_comments_to_own_line(tokens):
-    tokens = tokens[:]
-
     i = 0
-    last_newline = -1  # hack if we haven't seen a newline yet
     while i < len(tokens):
         t = tokens[i]
-        if t[0] == TOK_EOI:
-            break
-        # bookkeeping for newlines
-        if t[0] == TOK_NEWLINE:
+
+        if t[0] == TOK_COMMENT:
+            # already at beginning of line
+            if i == 0 or tokens[i - 1][0] == TOK_NEWLINE:
+                i += 1
+                continue
+            # already on own line
+            elif tokens[i - 1][0] == TOK_WHITESPACE and (
+                i == 1 or tokens[i - 2][0] == TOK_NEWLINE
+            ):
+                i += 1
+                continue
+            # need to move to previous line
             last_newline = i
+            while last_newline >= 0 and tokens[last_newline][0] != TOK_NEWLINE:
+                last_newline -= 1
+
+            # delete from here, and delete preceding whitespace
+            del tokens[i]
+            if i >= 1 and tokens[i - 1][0] == TOK_WHITESPACE:
+                del tokens[i - 1]
+            # figure out where to put it
+            i = last_newline + 1
+            tokens.insert(i, (TOK_WHITESPACE, get_indentation_at(tokens, i)))
+            tokens.insert(i + 1, t)
+            tokens.insert(i + 2, (TOK_NEWLINE, "\n"))
+            i += 2
+        else:
             i += 1
-            continue
-        # only care about comments
-        if t[0] != TOK_COMMENT:
-            i += 1
-            continue
-        # already at beginning of line
-        if i == 0 or tokens[i - 1][0] == TOK_NEWLINE:
-            i += 1
-            continue
-        # already on own line
-        if tokens[i - 1][0] == TOK_WHITESPACE and (
-            i == 1 or tokens[i - 2][0] == TOK_NEWLINE
-        ):
-            i += 1
-            continue
-        # need to move to previous line
-        # delete from here, and delete preceding whitespace
-        del tokens[i]
-        if i >= 1 and tokens[i - 1][0] == TOK_WHITESPACE:
-            del tokens[i - 1]
-        # figure out where to put it
-        i = last_newline + 1
-        tokens.insert(i, (TOK_WHITESPACE, get_indentation_at(tokens, i)))
-        tokens.insert(i + 1, t)
-        tokens.insert(i + 2, (TOK_NEWLINE, "\n"))
-        i += 2  # on the newline we added, to do newline bookkeeping
-    return tokens
 
 
 class script:
@@ -925,7 +921,7 @@ def extendedcaos_to_caos(s):
 
     # Move comments to own line first, so they stay before any additional lines
     # that get added
-    tokens = move_comments_to_own_line(tokens)
+    move_comments_to_own_line(tokens)
 
     # Get the initial parsetree. Transformations will modify tokens and the parsetree
     # at the same time

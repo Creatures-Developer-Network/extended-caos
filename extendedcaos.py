@@ -60,8 +60,7 @@ class script:
         self.dollar_vars = []
 
 
-def namedvariables_to_vaxx(tokens):
-    tokens = tokens[:]
+def namedvariables_to_vaxx(tokens, parsetree):
     scripts = [script(0, 0)]
 
     # find script extents
@@ -95,8 +94,6 @@ def namedvariables_to_vaxx(tokens):
         for i in range(s.start, s.end + 1):
             if tokens[i][0] == TOK_WORD and tokens[i][1][0] == "$":
                 tokens[i] = (TOK_WORD, var_mapping[tokens[i][1]])
-
-    return tokens
 
 
 def get_indentation_at(tokens, i):
@@ -960,6 +957,6 @@ def extendedcaos_to_caos(s):
     # Turn namedvariables to vaxx variables. This must come after all transformations
     # that add new variables (targ saving, macro arguments, condition short
     # circuiting, etc.
-    tokens = namedvariables_to_vaxx(tokens)
+    namedvariables_to_vaxx(tokens, parsetree)
 
     return tokens_to_string(tokens)

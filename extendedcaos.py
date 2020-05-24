@@ -459,38 +459,37 @@ def whiteout_node_and_line_from_tokens(node, tokens):
         tokens[j] = (TOK_WHITESPACE, "")
 
 
-def remove_double_targ(tokens):
-    tokens = tokens[:]
-
-    # TODO: do this without parsing twice
-
-    parsetree = parse(tokens)
-    for i, node in enumerate(parsetree):
+def remove_double_targ(tokens, parsetree):
+    node_index = 0
+    while node_index < len(parsetree) - 1:
         if (
-            node["type"] == "Command"
-            and node["name"] == "targ"
-            and i + 1 < len(parsetree)
-            and parsetree[i + 1]["type"] == "Command"
-            and parsetree[i + 1]["name"] == "targ"
+            parsetree[node_index]["type"] == "Command"
+            and parsetree[node_index]["name"] == "targ"
+            and parsetree[node_index + 1]["type"] == "Command"
+            and parsetree[node_index + 1]["name"] == "targ"
         ):
-            whiteout_node_and_line_from_tokens(node, tokens)
+            whiteout_node_and_line(tokens, parsetree, node_index)
+        else:
+            node_index += 1
 
-    parsetree = parse(tokens)
-    for i, node in enumerate(parsetree):
+    node_index = 0
+    while node_index < len(parsetree) - 2:
         if (
-            node["type"] == "Command"
-            and node["name"] == "targ"
-            and node["args"][0]["type"] == "Command"
-            and node["args"][0]["args"] == []
-            and i + 2 < len(parsetree)
-            and parsetree[i + 2]["type"] == "Command"
-            and parsetree[i + 2]["name"] == "targ"
-            and parsetree[i + 2]["args"][0]["type"] == "Command"
-            and parsetree[i + 2]["args"][0]["name"] == node["args"][0]["name"]
+            parsetree[node_index]["type"] == "Command"
+            and parsetree[node_index]["name"] == "targ"
+            and parsetree[node_index]["args"][0]["type"] == "Command"
+            and len(parsetree[node_index]["args"][0]["args"]) == 0
+            and parsetree[node_index + 1]["type"] == "Command"
+            and parsetree[node_index + 1]["name"] == "setv"
+            and parsetree[node_index + 2]["type"] == "Command"
+            and parsetree[node_index + 2]["name"] == "targ"
+            and parsetree[node_index + 2]["args"][0]["type"] == "Command"
+            and parsetree[node_index + 2]["args"][0]["name"]
+            == parsetree[node_index]["args"][0]["name"]
         ):
-            whiteout_node_and_line_from_tokens(parsetree[i + 2], tokens)
-
-    return tokens
+            whiteout_node_and_line(tokens, parsetree, node_index + 2)
+        else:
+            node_index += 1
 
 
 def expand_agentvariables(tokens, parsetree):
@@ -956,7 +955,7 @@ def extendedcaos_to_caos(s):
     # targ. Try to remove the cruft when possible to make the end result
     # easier to read and debug
     remove_extraneous_targ_saving(tokens, parsetree)
-    tokens = remove_double_targ(tokens)
+    remove_double_targ(tokens, parsetree)
 
     # Turn namedvariables to vaxx variables. This must come after all transformations
     # that add new variables (targ saving, macro arguments, condition short

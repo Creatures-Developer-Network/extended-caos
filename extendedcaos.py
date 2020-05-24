@@ -372,9 +372,10 @@ def explicit_targs(tokens, parsetree):
                     indent,
                 ),
             )
-            whiteout_node_and_line_from_tokens(toplevel, tokens)
+            whiteout_node_and_line(tokens, parsetree, node_index)
+        else:
+            node_index += 1
 
-        node_index += 1
 
 
 def remove_extraneous_targ_saving(tokens):

@@ -377,42 +377,42 @@ def explicit_targs(tokens, parsetree):
             node_index += 1
 
 
-
-def remove_extraneous_targ_saving(tokens):
-    tokens = tokens[:]
-    for i in range(len(tokens)):
-        if not (tokens[i][0] == TOK_WORD and tokens[i][1].lower() == "targ"):
-            continue
-        p = i + 1
-        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            p += 1
-        if not (
-            tokens[p][0] == TOK_WORD
-            and (tokens[p][1].lower()[0:2] == "va" or tokens[p][1][0] == "$")
+def remove_extraneous_targ_saving(tokens, parsetree):
+    node_index = 0
+    while node_index < len(parsetree) - 1:
+        if (
+            parsetree[node_index]["type"] == "Command"
+            and parsetree[node_index]["name"] == "targ"
+            and len(parsetree[node_index]["args"]) == 1
+            and parsetree[node_index]["args"][0]["type"] == "Variable"
+            and parsetree[node_index + 1]["type"] == "Command"
+            and parsetree[node_index + 1]["name"] == "seta"
+            and len(parsetree[node_index + 1]["args"]) == 2
+            and parsetree[node_index + 1]["args"][0]["type"] == "Variable"
+            and parsetree[node_index + 1]["args"][0]["value"]
+            == parsetree[node_index]["args"][0]["value"]
+            and parsetree[node_index + 1]["args"][1]["type"] == "Command"
+            and parsetree[node_index + 1]["args"][1]["name"] == "targ"
         ):
-            continue
-        var_name = tokens[p][1]
-        p += 1
-        startdelp = p
-        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            p += 1
-        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == "seta"):
-            continue
-        p += 1
-        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            p += 1
-        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == var_name):
-            continue
-        p += 1
-        while tokens[p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-            p += 1
-        if not (tokens[p][0] == TOK_WORD and tokens[p][1].lower() == "targ"):
-            continue
-        enddelp = p
-
-        for j in range(startdelp, enddelp + 1):
-            tokens[j] = (TOK_WHITESPACE, "")
-    return tokens
+            whiteout_node_and_line(tokens, parsetree, node_index + 1)
+        elif (
+            parsetree[node_index]["type"] == "Command"
+            and parsetree[node_index]["name"] == "targ"
+            and len(parsetree[node_index]["args"]) == 1
+            and parsetree[node_index]["args"][0]["type"] == "Command"
+            and re.match(r"^va\d\d$", parsetree[node_index]["args"][0]["name"])
+            and parsetree[node_index + 1]["type"] == "Command"
+            and parsetree[node_index + 1]["name"] == "seta"
+            and len(parsetree[node_index + 1]["args"]) == 2
+            and parsetree[node_index + 1]["args"][0]["type"] == "Command"
+            and parsetree[node_index + 1]["args"][0]["name"]
+            == parsetree[node_index]["args"][0]["name"]
+            and parsetree[node_index + 1]["args"][1]["type"] == "Command"
+            and parsetree[node_index + 1]["args"][1]["name"] == "targ"
+        ):
+            whiteout_node_and_line(tokens, parsetree, node_index + 1)
+        else:
+            node_index += 1
 
 
 def whiteout_node_from_tokens(node, tokens):
@@ -955,7 +955,7 @@ def extendedcaos_to_caos(s):
     # Explicit targ adds in a lot of cruft around saving targ and resetting
     # targ. Try to remove the cruft when possible to make the end result
     # easier to read and debug
-    tokens = remove_extraneous_targ_saving(tokens)
+    remove_extraneous_targ_saving(tokens, parsetree)
     tokens = remove_double_targ(tokens)
 
     # Turn namedvariables to vaxx variables. This must come after all transformations

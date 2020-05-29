@@ -186,22 +186,19 @@ def node_to_string(node):
 def generate_save_result_to_variable(variable_name, node):
     value = node_to_string(node)
 
-    # TODO: can we look at what the parent is expecting?
-    # e.g. "va00", or "FROM" in Docking Station, which can be an agent or a string
     if node["type"] == "Variable" or (
         node["type"] == "Command" and node["commandret"] == "variable"
     ):
-        # avoid ELIF because it's hard for other transformations to handle
+        # e.g. "va00", or "FROM" in Docking Station, which can be an agent or a string
+        # TODO: can we look at what the parent is expecting?
         return generate_snippet(
             (
                 "doif type {value} = 0 or type {value} = 1\n"
                 + "    setv {var} {value}\n"
+                + "elif type {value} = 2\n"
+                + "    sets {var} {value}\n"
                 + "else\n"
-                + "    doif type {value} = 2\n"
-                + "        sets {var} {value}\n"
-                + "    else\n"
-                + "        seta {var} {value}\n"
-                + "    endi\n"
+                + "    seta {var} {value}\n"
                 + "endi\n"
             ).format(value=value, var=variable_name)
         )
@@ -336,13 +333,6 @@ def explicit_targs(tokens, parsetree):
         if toplevel["type"] not in ("Command", "Condition", "DotCommand"):
             node_index += 1
             continue
-
-        insertion_point = toplevel["start_token"]
-        if toplevel["type"] == "Command" and toplevel["name"] == "elif":
-            raise Exception("Can't handle ELIF commands")
-
-        while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
-            insertion_point -= 1
 
         insertions = []
         for a in toplevel["args"]:
@@ -764,6 +754,32 @@ def add_token_offset_to_nodes(nodes, offset):
 
 
 def insert_before_node(tokens, nodes, node_index, snippet):
+    if (
+        any(_[0] not in (TOK_WHITESPACE, TOK_NEWLINE) for _ in snippet)
+        and nodes[node_index]["type"] == "Command"
+        and nodes[node_index]["name"] == "elif"
+    ):
+        # we need to turn the whole rest of this doif block into an else/doif,
+        # so that we can actually add instructions before this elif
+        elif_node = nodes[node_index]
+        # change elif to a doif
+        tokens[elif_node["start_token"]] = (TOK_WORD, "doif")
+        elif_node["name"] = "doif"
+        # add a new else before it
+        indent = get_indentation_at(tokens, elif_node["start_token"])
+        node_index = insert_before_node(
+            tokens, nodes, node_index, generate_snippet(indent + "else\n" + "    "),
+        )
+        # find everything until the matching endi
+        endi_index = get_endi_index_for(nodes, node_index)
+        # indent everything up to next endi
+        for j in range(node_index + 1, endi_index):
+            insert_before_node(tokens, nodes, j, generate_snippet("    "))
+        snippet = add_indent(snippet, "    ")
+        # add new endi
+        endi_snippet = generate_snippet(indent + "    endi\n")
+        insert_before_node(tokens, nodes, endi_index, endi_snippet)
+
     insertion_point = nodes[node_index]["start_token"]
     while tokens[insertion_point - 1][0] == TOK_WHITESPACE:
         insertion_point -= 1
@@ -779,40 +795,6 @@ def insert_before_node(tokens, nodes, node_index, snippet):
         nodes.insert(node_index + i, x)
 
     return node_index + len(parsedsnippet)
-
-
-def turn_elifs_into_elses(tokens, nodes):
-    p = 0
-    while p < len(nodes):
-        node = nodes[p]
-        if not (node["type"] == "Command" and node["name"] == "elif"):
-            p += 1
-            continue
-
-        # add new else before us
-        indent = get_indentation_at(tokens, node["start_token"])
-        p = insert_before_node(
-            tokens, nodes, p, generate_snippet(indent + "else\n" + "    ")
-        )
-
-        # change us to a doif
-        tokens[node["start_token"]] = (TOK_WORD, "doif")
-        node["name"] = "doif"
-
-        # find everything until the matching endi
-        endi_index = get_endi_index_for(nodes, p)
-
-        # indent everything up to next endi
-        for j in range(p + 1, endi_index):
-            insert_before_node(tokens, nodes, j, generate_snippet("    "))
-
-        # add new endi
-        snippet = generate_snippet(indent + "    endi\n")
-        insert_before_node(tokens, nodes, endi_index, snippet)
-
-        # not necessary, as we're now a DOIF and will be skipped on next iteration,
-        # but good practice
-        p += 1
 
 
 def handle_condition_short_circuiting(tokens, parsetree):
@@ -926,13 +908,6 @@ def extendedcaos_to_caos(s):
     # Get the initial parsetree. Transformations will modify tokens and the parsetree
     # at the same time
     parsetree = parse(tokens)
-
-    # Turn ELIF into ELSE/DOIF. This absolutely must come near the beginning - other
-    # transformations make the assumption that commands on a previous line will
-    # execute first. ELIF is the one command that breaks that rule!
-    # TODO: undo this transformation later on, if no other transformation has
-    # added anything in-between the ELSE and DOIF
-    turn_elifs_into_elses(tokens, parsetree)
 
     # Handle condition short-circuiting by extracting boolean logic and doing
     # it manually. This needs to come before macro expansion, explicit targs,

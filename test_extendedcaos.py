@@ -374,12 +374,10 @@ class TestExtendedCAOS(unittest.TestCase):
         * macro with variable
         doif type va00 = 0 or type va00 = 1
             setv va01 va00
+        elif type va00 = 2
+            sets va01 va00
         else
-            doif type va00 = 2
-                sets va01 va00
-            else
-                seta va01 va00
-            endi
+            seta va01 va00
         endi
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000
@@ -390,12 +388,10 @@ class TestExtendedCAOS(unittest.TestCase):
         * macro with command of an unknown result type
         doif type from = 0 or type from = 1
             setv va01 from
+        elif type from = 2
+            sets va01 from
         else
-            doif type from = 2
-                sets va01 from
-            else
-                seta va01 from
-            endi
+            seta va01 from
         endi
         sets va01 lowa va01
         new: simp 1 2 1001 va01 13 4 2000
@@ -496,38 +492,28 @@ class TestExtendedCAOS(unittest.TestCase):
         input = """
         doif 1 = 1
             dbg: outs "first branch"
-        elif 2 = 3 or 4 = 5
+        elif ownr.posy > 5
             dbg: outs "second branch"
-        elif 6 = 7 or 8 = 9
-            dbg: outs "third branch"
-        elif 10 = 11
-            dbg: outs "fourth branch"
         else
-            dbg: outs "fifth branch"
+            dbg: outs "third branch"
         endi
         """
         desired_output = """
         doif 1 = 1
             dbg: outs "first branch"
         else
-            doif 2 = 3 or 4 = 5
+            seta va00 targ
+            targ ownr
+            setv va01 posy
+            targ va00
+            doif va01 > 5
                 dbg: outs "second branch"
             else
-                doif 6 = 7 or 8 = 9
-                    dbg: outs "third branch"
-                else
-                    doif 10 = 11
-                        dbg: outs "fourth branch"
-                    else
-                        dbg: outs "fifth branch"
-                    endi
-                endi
+                dbg: outs "third branch"
             endi
         endi
         """
-        tokens = lexcaos(input)
-        turn_elifs_into_elses(tokens, parse(tokens))
-        self.assertMultiLineEqual(desired_output, tokens_to_string(tokens))
+        self.assertMultiLineEqual(desired_output, extendedcaos_to_caos(input))
 
     def test_short_circuit_doifs(self):
         input = """

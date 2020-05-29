@@ -1,16 +1,12 @@
 # encoding: utf-8
 
 import itertools
-import json
 import re
-import logging
 import string
 import sys
 
 from caoslexer import *
 from caosparser import *
-
-logger = logging.getLogger(__name__)
 
 
 def move_comments_to_own_line(tokens):
@@ -226,24 +222,6 @@ def generate_save_result_to_variable(variable_name, node):
     )
 
 
-def get_doif_for(parsetree, p):
-    assert parsetree[p]["type"] == "Command"
-    assert parsetree[p]["name"] == "elif"
-
-    nesting = 0
-
-    while True:
-        p -= 1
-        if parsetree[p]["type"] == "Command" and parsetree[p]["name"] == "endi":
-            nesting += 1
-        elif parsetree[p]["type"] == "Command" and parsetree[p]["name"] == "doif":
-            if nesting == 0:
-                return parsetree[p]
-            else:
-                nesting -= 1
-    raise Exception("Couldn't find matching doif")
-
-
 def get_endi_index_for(parsetree, p):
     assert parsetree[p]["type"] == "Command"
     assert parsetree[p]["name"] in ("doif", "elif")
@@ -398,13 +376,6 @@ def remove_extraneous_targ_saving(tokens, parsetree):
             whiteout_node_and_line(tokens, parsetree, node_index + 1)
         else:
             node_index += 1
-
-
-def whiteout_node_from_tokens(node, tokens):
-    startp = node["start_token"]
-    endp = node["end_token"]
-    for j in range(startp, endp + 1):
-        tokens[j] = (TOK_WHITESPACE, "")
 
 
 def whiteout_child_node_from_tokens(parent_node, child_node, tokens):
@@ -612,7 +583,6 @@ def expand_macros(tokens, parsetree):
                 break
             p += 1
 
-        end_node = parsetree[p]
         macros.append(
             (
                 start_node["name"],
@@ -676,7 +646,6 @@ def expand_macros(tokens, parsetree):
 
         indent = get_indentation_at(tokens, toplevel["start_token"])
 
-        argvars = []
         argnames = macros_by_name[toplevel["name"].lower()][0]
         for i, a in enumerate(toplevel["args"]):
             argvar = argnames[i]

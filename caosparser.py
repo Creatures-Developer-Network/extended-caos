@@ -50,14 +50,6 @@ def maybe_eat_whitespace(state):
     return ate_whitespace
 
 
-def maybe_eat_whitespace_or_newline(state):
-    ate_whitespace = False
-    while state.tokens[state.p][0] in (TOK_WHITESPACE, TOK_NEWLINE):
-        ate_whitespace = True
-        state.p += 1
-    return ate_whitespace
-
-
 def maybe_eat_whitespace_or_newline_or_comment(state):
     ate_whitespace = False
     while state.tokens[state.p][0] in (TOK_WHITESPACE, TOK_NEWLINE, TOK_COMMENT):
@@ -70,14 +62,6 @@ def eat_whitespace(state):
     if not maybe_eat_whitespace(state):
         raise Exception(
             "Expected whitespace, got %s %s"
-            % (state.tokens[state.p][0], state.tokens[state.p][1])
-        )
-
-
-def eat_whitespace_or_newline(state):
-    if not maybe_eat_whitespace_or_newline(state):
-        raise Exception(
-            "Expected whitespace or newline, got %s %s"
             % (state.tokens[state.p][0], state.tokens[state.p][1])
         )
 
